@@ -103,4 +103,6 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-data/
+data/*
+!data/paper_potentials.txt
+!data/sample_potential.png

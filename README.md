@@ -6,7 +6,7 @@ This project can be run locally or on the cloud in Google Colab. To install, dow
 Since TensorFlow and Google Colab are constantly changing, long-term compatibility can not be guaranteed. It's best to use tensorflow==1.12.2 which can be installed in Google Colab with:
 
 ```
-!pip install -q tensorflow-gpu==1.12.2
+!pip install -q tensorflow-gpu==1.13.1
 ```
 or locally without the '!'. As one can see, the notebooks are set to use a GPU instance in Google Colab.
 

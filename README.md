@@ -24,7 +24,7 @@ As a general rule, the notebooks should be run in the order of the numbers at th
 2_kernel_ridge_regession.ipynb
 ...
 ```
-The notebook `0_define_helper_functions.ipynb` will also write the shared `.py` files to a folder called `quantumflow` that will be imported by the rest of the notebooks like a python module.
+The notebook `0_define_helper_functions.ipynb` will also write the shared `.py` files to a folder called `quantumflow` - if they dont exist already - that will be imported by the rest of the notebooks like a python module.
 
 All the files assume to be run with the current working directory being the folder they are in. Please make sure this is the case if you want to run the notebooks somewhere else.
 

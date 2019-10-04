@@ -33,16 +33,3 @@ def generate_potentials(dataset_size=2000, points=500, n_gauss=3, length=1.0,
         return np_potentials, np_x
     else:
         return np_potentials
-
-if __name__ == '__main__':
-    print("generating 1D gaussian mixture potential function:")
-    print("M = 2000 ... dataset size")
-    print("G = 500  ... discretization points of interval [0, 1]")
-    print("negative sum of 3 gauss functions")
-    print("random uniform amplitude (0, 10), mean (0.4, 0.6), and std (0.03, 0.1)")
-    print("")
-
-    np_potentials, np_x = generate_potentials(return_x=True)
-
-    print("potentials: ", np_potentials.shape, np_potentials.dtype)
-    print("x:", np_x.shape, np_x.dtype)

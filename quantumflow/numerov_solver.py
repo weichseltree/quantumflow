@@ -3,23 +3,6 @@ import numpy as np
 
 from quantumflow.calculus_utils import integrate, integrate_simpson, laplace
 
-
-def unpack_dataset(N, dataset):
-    np_x, np_potentials, np_solutions, np_E = dataset
-    np_density = np.sum(np.square(np_solutions)[:, :, :N], axis=-1)
-    
-    dataset_size, discretization_points, _ = np_solutions.shape
-    h = (max(np_x) - min(np_x))/(discretization_points-1)
-    
-    np_potential = np.expand_dims(np_potentials, axis=2)*np_solutions**2
-    np_P = integrate_simpson(np_potential, h, axis=1)
-    np_K = np_E - np_P
-
-    kinetic_energy = np.sum(np_K[:, :N], axis=-1)
-    
-    return np_x, np_potentials, np_solutions, np_E, np_density, kinetic_energy, dataset_size, discretization_points, h    
-
-
 # recurrent tensorflow cell for solving the numerov equation recursively
 class ShootingNumerovCell(tf.nn.rnn_cell.RNNCell):
     def __init__(self, h=1.0):
@@ -85,7 +68,7 @@ class NumerovSolver():
         return np.moveaxis(solutions, -1, time_axis)
 
     
-    def solve_numerov(self, np_potentials, target_roots, split_energies, progress=None):
+    def solve_numerov(self, np_potentials, target_roots, split_energies, cut_after_last_root=True, progress=None):
 
         np_E_low = split_energies[:, :-1].copy()
         np_E_high = split_energies[:, 1:].copy()
@@ -129,10 +112,11 @@ class NumerovSolver():
         np_roots_diff = np.abs(np_roots_high - np_roots_low)  # useless but keep it
         # assert(np.all(np.sum(np_roots_diff, axis=1) == 1)) # sometimes roots are at different places!
 
-        np_nan_cumsum = np.cumsum(np.pad(np_roots_diff, ((0, 0), (1, 0), (0, 0)), 'constant'), axis=1)
-        np_nan_index = np_nan_cumsum == np.expand_dims(np_nan_cumsum[:, -1], axis=1)
+        if cut_after_last_root:
+            np_nan_cumsum = np.cumsum(np.pad(np_roots_diff, ((0, 0), (1, 0), (0, 0)), 'constant'), axis=1)
+            np_nan_index = np_nan_cumsum == np.expand_dims(np_nan_cumsum[:, -1], axis=1)
 
-        np_solutions_low[np_nan_index] = np.nan
+            np_solutions_low[np_nan_index] = np.nan
 
         return np_solutions_low, np_E, step
 

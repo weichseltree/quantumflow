@@ -25,7 +25,19 @@ def integrate_simpson(data, h, axis=-1):
     return integral + h / 3 * (2 * np.sum(even, axis=axis) + 4 * np.sum(odd, axis=axis) - np.take(data, 0, axis=axis)
                                                                                         - np.take(data, -1, axis=axis))
 
-
 def laplace(data, h):  # time_axis=1
     temp_laplace = 1 / h ** 2 * (data[:, :-2, :] + data[:, 2:, :] - 2 * data[:, 1:-1, :])
     return np.pad(temp_laplace, ((0, 0), (1, 1), (0, 0)), 'constant')
+
+def normalize(function, h, axis=-1):   
+    norm = integrate_simpson(function, h, axis=axis)
+    return function * 1 / np.expand_dims(norm, axis=axis)
+
+def rbf_kernel(X, X_train, gamma):
+    return np.exp(-gamma*np.sum(np.square(X[:, :, np.newaxis] - np.transpose(X_train)[np.newaxis, :, :]), 1))
+
+def predict(X, X_train, weights, gamma):
+    return np.sum(weights[np.newaxis, :]*rbf_kernel(X, X_train, gamma), 1)
+
+def functional_derivative(X, X_train, weights, gamma, h):
+    return -1/h*np.sum(weights[np.newaxis, :]*2*gamma*(X[:, :, np.newaxis] - np.transpose(X_train)[np.newaxis, :, :])*rbf_kernel(X, X_train, gamma)[:, np.newaxis, :], 2)

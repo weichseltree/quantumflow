@@ -1,213 +1,182 @@
 import tensorflow as tf
-import numpy as np
-
-from quantumflow.calculus_utils import integrate, integrate_simpson, laplace
+from quantumflow.generate_datasets import integrate
 
 # recurrent tensorflow cell for solving the numerov equation recursively
-class ShootingNumerovCell(tf.nn.rnn_cell.RNNCell):
-    def __init__(self, h=1.0):
-        super().__init__()
+class ShootingNumerovCell(tf.keras.layers.AbstractRNNCell):
+    def __init__(self, shape, h, **kwargs):
+        super(ShootingNumerovCell, self).__init__(**kwargs)
         self._h2_scaled = 1 / 12 * h ** 2
+        self.shape = shape
 
-    def __call__(self, inputs, state, scope=None):
-        k_m2, k_m1, y_m2, y_m1 = tf.unstack(state, axis=-1)
+    @property
+    def state_size(self):
+        return self.shape + (4,)
 
-        y = (2 * (1 - 5 * self._h2_scaled * k_m1) * y_m1 - (1 + self._h2_scaled * k_m2) * y_m2) / (
-                    1 + self._h2_scaled * inputs)
+    @property
+    def output_size(self):
+        return self.shape + (1,)
+
+    def build(self, input_shape):
+        self.built = True
+
+    def call(self, inputs, states):
+        k_m2, k_m1, y_m2, y_m1 = tf.unstack(states[0], axis=-1)
+        
+        y = (2 * (1 - 5 * self._h2_scaled * k_m1) * y_m1 - (1 + self._h2_scaled * k_m2) * y_m2) / (1 + self._h2_scaled * inputs)
 
         new_state = tf.stack([k_m1, inputs, y_m1, y], axis=-1)
         return y, new_state
 
-    @property
-    def state_size(self):
-        return 4
-
-    @property
-    def output_size(self):
-        return 1
 
 # tf function for using the shooting numerov method
 #
-# the init_factor is the slope of the solution at x=0
+# the numerov_init_slope is the slope of the solution at x=0
 # it can be constant>0 because it's actual value will be determined when the wavefunction is normalized
 #
-def shooting_numerov(k_squared, h=1, init_factor=1e-128):
-    shooting_cell = ShootingNumerovCell(h=h)
-    init_state = tf.stack([k_squared[:, 0], k_squared[:, 1], tf.zeros_like(k_squared[:, 2]),
-                           init_factor * h * tf.ones_like(k_squared[:, 3])], axis=-1)
-    outputs, _ = tf.nn.static_rnn(shooting_cell, tf.unstack(k_squared, axis=1)[2:], initial_state=init_state)
-    output = tf.stack([init_state[:, 2], init_state[:, 3]] + outputs, axis=-1)
+def shooting_numerov(k_squared, params):
+    h = params['h']
+    numerov_init_slope = params['numerov_init_slope']
+    init_values = tf.zeros_like(k_squared[:, 0])
+    one_step_values = numerov_init_slope * h * tf.ones_like(k_squared[:, 0])
+    init_state = tf.stack([k_squared[:, 0], k_squared[:, 1], init_values, one_step_values], axis=-1)
+    outputs = tf.keras.layers.RNN(ShootingNumerovCell(k_squared.shape[2:], h), return_sequences=True)(k_squared[:, 2:], initial_state=init_state)
+    output = tf.concat([tf.expand_dims(init_values, axis=1), tf.expand_dims(one_step_values, axis=1), outputs], axis=1)
     return output
+
 
 # returns the rearranged schroedinger equation term in the numerov equation
 # k_squared = 2*m_e/h_bar**2*(E - V(x))
 def numerov_k_squared(potentials, energies):
-    return 2 * (np.expand_dims(energies, axis=1) - np.repeat(np.expand_dims(potentials, axis=2), energies.shape[1], axis=2))
+    return 2 * (tf.expand_dims(energies, axis=1) - tf.repeat(tf.expand_dims(potentials, axis=2), energies.shape[1], axis=2))
 
 
-def detect_roots(array1):
-    return np.logical_or(array1[:, 1:] == 0, array1[:, 1:] * array1[:, :-1] < 0)
+@tf.function
+def find_split_energies(potentials, params):
+    M = potentials.shape[0]
+    N = params['n_orbitals']
+
+    # Knotensatz: number of roots = quantum state
+    # so target root = target excited state quantum number
+    target_roots = tf.repeat(tf.expand_dims(tf.range(N + 1), axis=0), M, axis=0)
+
+    # lowest value of potential as lower bound
+    E_split = tf.repeat(tf.expand_dims(tf.reduce_min(potentials, axis=1), axis=1), N + 1, axis=1)
+
+    solutions_split = tf.zeros((potentials.shape[0], potentials.shape[1], N + 1), dtype=potentials.dtype)
+    not_converged = tf.ones(potentials.shape[0], dtype=tf.bool)
+    search_boost = tf.ones_like(E_split, dtype=tf.bool)
+    E_delta = tf.ones_like(E_split)
+
+    while tf.math.reduce_any(not_converged):
+        V_split = numerov_k_squared(tf.boolean_mask(potentials, not_converged), tf.boolean_mask(E_split, not_converged))
+
+        solutions_split_new = shooting_numerov(V_split, params)
+
+        partitioned_data = tf.dynamic_partition(solutions_split, tf.cast(not_converged, tf.int32) , 2)
+        condition_indices = tf.dynamic_partition(tf.range(tf.shape(solutions_split)[0]), tf.cast(not_converged, tf.int32) , 2)
+
+        solutions_split = tf.dynamic_stitch(condition_indices, [partitioned_data[0], solutions_split_new])
+        solutions_split.set_shape((potentials.shape[0], potentials.shape[1], N + 1))
+
+        roots_split = tf.reduce_sum(tf.cast(detect_roots(solutions_split), tf.int32), axis=1)
+
+        not_converged = tf.logical_and(tf.logical_not(tf.reduce_all(tf.equal(roots_split, target_roots), axis=1)), not_converged)
+
+        search_direction = tf.cast(roots_split < target_roots, potentials.dtype) - tf.cast(roots_split > target_roots, potentials.dtype)
+        boost = tf.logical_and(tf.equal(search_direction, tf.sign(E_delta)), search_boost)
+
+        E_delta += tf.cast(boost, potentials.dtype)*E_delta
+        stop_boost = search_direction * tf.sign(E_delta) < 0
+        search_boost &= tf.logical_not(stop_boost)
+        E_delta += -1.5*E_delta*tf.cast(stop_boost, potentials.dtype)
+
+        E_split += E_delta*tf.expand_dims(tf.cast(not_converged, potentials.dtype), axis=-1)
+
+    return E_split
 
 
-class NumerovSolver():
-    def __init__(self, G, h):
-        self.K_SQUARED = tf.placeholder(tf.float64, shape=(None, G))
-        self.solution = shooting_numerov(self.K_SQUARED, h=h)
-        self.sess = tf.Session()
-        self.h = h
-        self.G = G
-        
-    # functtion to solve the shooting numerov equation for a given tensor of k_squared functions
-    # the tensor has to have one dimension for the time along wich to solve the equation
-    # all other dimensions will be flattened internally but the return value will be reshaped back
-    def run_numerov(self, k_squared, time_axis=-1):
-        shape = k_squared.shape[:time_axis] + k_squared.shape[time_axis + 1:]
-        flattened = np.reshape(np.moveaxis(k_squared, time_axis, -1), (-1, k_squared.shape[time_axis]))
-        flattened_solutions = self.sess.run(self.solution, feed_dict={self.K_SQUARED: flattened})
-        solutions = np.reshape(flattened_solutions, shape + (k_squared.shape[time_axis],))
-        return np.moveaxis(solutions, -1, time_axis)
+def detect_roots(array):
+    return tf.logical_or(tf.equal(array[:, 1:], 0), array[:, 1:] * array[:, :-1] < 0)
 
+
+@tf.function
+def solve_numerov(potentials, target_roots, split_energies, params):
+    E_low = split_energies[:, :-1]
+    E_high = split_energies[:, 1:]
+
+    # because the search interval is halved at every step
+    # 32 iterations will always converge to the best numerically possible accuracy of E
+    # (empirically ~25 steps)
+
+    E = 0.5 * (E_low + E_high)
+    E_last = E * 2
     
-    def solve_numerov(self, np_potentials, target_roots, split_energies, cut_after_last_root=True, progress=None):
+    while tf.reduce_any(tf.logical_not(tf.equal(E_last, E))):
+        V = numerov_k_squared(potentials, E)
 
-        np_E_low = split_energies[:, :-1].copy()
-        np_E_high = split_energies[:, 1:].copy()
+        solutions = shooting_numerov(V, params)
+        roots = tf.reduce_sum(tf.cast(detect_roots(solutions), tf.int32), axis=1)
 
-        # because the search interval is halved at every step
-        # 32 iterations will always converge to the best numerically possible accuracy of E
-        # (empirically ~25 steps)
+        update_low = roots <= target_roots
+        update_high = tf.logical_not(update_low)
 
-        np_E = 0.5 * (np_E_low + np_E_high)
-        np_E_last = np.copy(np_E) * 2
+        E_low = tf.where(update_low, E, E_low)
+        E_high = tf.where(update_high, E, E_high)
 
-        
-        if progress is not None:
-            progress.value = 0
-            progress.max = np.prod(np_E.shape)
-            progress.description = 'Numerov Pass: '
-        
-        step = 0
-        while np.any(np_E_last - np_E):
-            np_V = numerov_k_squared(np_potentials, np_E)
-            np_solutions = self.run_numerov(np_V, time_axis=1)
-            np_roots = np.sum(detect_roots(np_solutions), axis=1)
+        E_last = E
+        E = 0.5 * (E_low + E_high)
 
-            np_E_low[np_roots <= target_roots] = np_E[np_roots <= target_roots]
-            np_E_high[np_roots > target_roots] = np_E[np_roots > target_roots]
+    solutions_low = shooting_numerov(numerov_k_squared(potentials, E_low), params)
+    roots_low = tf.cast(detect_roots(solutions_low), tf.double)
 
-            np_E_last = np_E
-            np_E = 0.5 * (np_E_low + np_E_high)
+    solutions_high = shooting_numerov(numerov_k_squared(potentials, E_high), params)
+    roots_high = tf.cast(detect_roots(solutions_high), tf.double)
 
-            if progress is not None:
-                progress.value = progress.max - np.sum(np_E_last - np_E != 0)
-                progress.description = 'Numerov Pass: ' + str(progress.value) + '/' + str(progress.max)
-            step += 1
+    roots_diff = tf.abs(roots_high - roots_low)  
 
-        np_solutions_low = self.run_numerov(numerov_k_squared(np_potentials, np_E_low), time_axis=1)
-        np_roots_low = 1 * detect_roots(np_solutions_low)
+    roots_cumsum = tf.cumsum(tf.pad(roots_diff, ((0, 0), (1, 0), (0, 0)), 'constant'), axis=1)
 
-        np_solutions_high = self.run_numerov(numerov_k_squared(np_potentials, np_E_high), time_axis=1)
-        np_roots_high = 1 * detect_roots(np_solutions_high)
+    invalid = tf.equal(roots_cumsum, tf.expand_dims(roots_cumsum[:, -1], axis=1))
 
-        np_roots_diff = np.abs(np_roots_high - np_roots_low)  # useless but keep it
-        # assert(np.all(np.sum(np_roots_diff, axis=1) == 1)) # sometimes roots are at different places!
+    return solutions_low, E, invalid
 
-        if cut_after_last_root:
-            np_nan_cumsum = np.cumsum(np.pad(np_roots_diff, ((0, 0), (1, 0), (0, 0)), 'constant'), axis=1)
-            np_nan_index = np_nan_cumsum == np.expand_dims(np_nan_cumsum[:, -1], axis=1)
 
-            np_solutions_low[np_nan_index] = np.nan
-
-        return np_solutions_low, np_E, step
-
+@tf.function
+def solve_schroedinger(potentials, params):
+    M = potentials.shape[0]
+    G = potentials.shape[1]
+    N = params['n_orbitals']
     
-    def find_split_energies(self, np_potentials, N, progress=None):
-        M = np_potentials.shape[0]
-        
-        # Knotensatz: number of roots = quantum state
-        # so target root = target excited state quantum number
-        target_roots = np.repeat(np.expand_dims(np.arange(N + 1), axis=0), M, axis=0)
+    E_split = find_split_energies(potentials, params)
 
-        # lowest value of potential as lower bound
-        np_E_split = np.repeat(np.expand_dims(np.min(np_potentials, axis=1), axis=1), N + 1, axis=1)
+    target_roots = tf.repeat(tf.expand_dims(tf.range(N), axis=0), M, axis=0)
+    solutions_forward, E_forward, invalid_forward = solve_numerov(potentials, target_roots, E_split, params)
+    #solutions_forward /= tf.expand_dims(tf.reduce_max(tf.abs(solutions_forward)*tf.cast(tf.logical_not(invalid_forward), tf.double), axis=1), axis=1)
 
-        np_solutions_split = np.zeros((np_potentials.shape[0], np_potentials.shape[1], N + 1), dtype=np.float64)
-        not_converged = np.ones(np_potentials.shape[0], dtype=np.bool)
-        search_boost = np.ones_like(np_E_split)
-        np_E_delta = np.ones_like(np_E_split)
+    solutions_backward, E_backward, invalid_backward = solve_numerov(tf.reverse(potentials, axis=[1]), target_roots, E_split, params)
+    solutions_backward = tf.reverse(solutions_backward, axis=[1])
+    invalid_backward = tf.reverse(invalid_backward, axis=[1])
+    #solutions_backward /= tf.expand_dims(tf.reduce_max(tf.abs(solutions_backward)*tf.cast(tf.logical_not(invalid_backward), tf.double), axis=1), axis=1)
 
-        if progress is not None:
-            progress.value = 0
-            progress.max = M
-            progress.description = 'Searching Roots:'
+    n_invalid_forward = tf.reduce_sum(tf.cast(invalid_forward, tf.int32), axis=1)
+    n_invalid_backward = tf.reduce_sum(tf.cast(invalid_backward, tf.int32), axis=1)
+    merge_index = (G - n_invalid_forward - n_invalid_backward)//2 + n_invalid_forward
 
-        step = 0
-        while np.any(not_converged):
-            np_V_split = numerov_k_squared(np_potentials[not_converged], np_E_split[not_converged])
-            np_solutions_split[not_converged] = self.run_numerov(np_V_split, time_axis=1)
-            np_roots_split = np.sum(detect_roots(np_solutions_split), axis=1)
+    merge_value_forward = tf.reduce_sum(tf.gather(tf.transpose(solutions_forward, perm=[0, 2, 1]), tf.expand_dims(merge_index, axis=2), batch_dims=2), axis=2)
+    merge_value_backward = tf.reduce_sum(tf.gather(tf.transpose(solutions_backward, perm=[0, 2, 1]), tf.expand_dims(merge_index, axis=2), batch_dims=2), axis=2)
 
-            not_converged[np.all(np_roots_split == target_roots, axis=1)] = False
+    factor = merge_value_forward/merge_value_backward
+    solutions_backward *= tf.expand_dims(factor, axis=1)
 
-            search_direction = 1 * (np_roots_split < target_roots) - 1 * (np_roots_split > target_roots)
-            np_E_delta[np.logical_and(search_direction == np.sign(np_E_delta), search_boost)] *= 2
-            search_boost[search_direction * np.sign(np_E_delta) < 0] = 0
-            np_E_delta[search_direction * np.sign(np_E_delta) < 0] *= -0.5
+    join_mask = tf.expand_dims(tf.expand_dims(tf.range(G), axis=0), axis=2) < tf.expand_dims(merge_index, axis=1)
 
-            np_E_split[not_converged] += np_E_delta[not_converged]
+    solutions = tf.where(join_mask, solutions_forward, solutions_backward)
 
-            if progress is not None:
-                progress.value = progress.max - np.sum(not_converged)
-                progress.description = 'Searching Roots: ' + str(progress.value) + '/' + str(progress.max)
-            step += 1
+    #normalization
+    density = solutions ** 2
+    norm = integrate(density, params['h'])
+    solutions *= 1 / tf.sqrt(tf.expand_dims(norm, axis=1))
 
-        return np_E_split, step
-
+    E = 0.5*(E_forward + E_backward)
     
-    def solve_schroedinger(self, np_potentials, N, progress=None):
-        M = np_potentials.shape[0]
-        G = np_potentials.shape[1]
-        
-        assert (G == self.G)
-        np_E_split, _ = self.find_split_energies(np_potentials, N, progress=progress)
-
-        target_roots = np.repeat(np.expand_dims(np.arange(N), axis=0), M, axis=0)
-        np_solutions_forward, np_E_forward, _ = self.solve_numerov(np_potentials, target_roots, np_E_split, progress=progress)
-        np_solutions_forward /= np.expand_dims(np.nanmax(np.abs(np_solutions_forward), axis=1), axis=1)
-
-        assert not np.any(np.all(np.isnan(np_solutions_forward), axis=1))
-
-        np_solutions_backward, np_E_backward, _ = self.solve_numerov(np.flip(np_potentials, axis=1), target_roots, np_E_split, progress=progress)
-        np_solutions_backward = np.flip(np_solutions_backward, axis=1)
-        np_solutions_backward /= np.expand_dims(np.nanmax(np.abs(np_solutions_backward), axis=1), axis=1)
-
-        assert not np.any(np.all(np.isnan(np_solutions_backward), axis=1))
-
-        np_factor = np_solutions_forward / np_solutions_backward
-
-        assert not np.any(np.all(np.isnan(np_factor), axis=1))
-
-        np_solutions_backward *= np.expand_dims(np.nanmedian(np_factor, axis=1), axis=1)
-
-        join_error = np.nanmin(np.abs(np_solutions_backward - np_solutions_forward), axis=1)
-
-        join_error = np.nanmax(np_solutions_backward / np_solutions_forward, axis=1)
-
-        join_index = np.nanargmin(np.abs(np_solutions_backward - np_solutions_forward), axis=1)
-
-        join_mask = np.expand_dims(np.expand_dims(np.arange(np_solutions_backward.shape[1]), axis=0), axis=2) >= np.expand_dims(join_index, axis=1)
-
-        np_solutions = np_solutions_forward
-        np_solutions[join_mask] = np_solutions_backward[join_mask]
-
-        # normalization
-        np_norm = np_solutions ** 2
-        np_norm = integrate_simpson(np_norm, self.h, axis=1)
-        np_solutions *= 1 / np.sqrt(np.expand_dims(np_norm, axis=1))
-
-        assert not np.any(np.all(np.isnan(np_solutions), axis=1))
-        
-        np_E = 0.5*(np_E_forward + np_E_backward)
-        
-        return np_E, np_solutions
-    
+    return E, solutions

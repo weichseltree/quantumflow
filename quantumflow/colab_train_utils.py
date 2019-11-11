@@ -1,5 +1,5 @@
 import numpy as np
-from quantumflow.calculus_utils import integrate, integrate_simpson, laplace
+from quantumflow.calculus_utils import integrate, laplace, np_integrate
 
 def test_colab_devices():
     import os
@@ -17,67 +17,6 @@ def test_colab_devices():
         pass
 
     return has_gpu, has_tpu
-
-
-def unpack_dataset(N, dataset):
-    x, potentials, solutions, E = dataset.values()
-    density = np.sum(np.square(solutions)[:, :, :N], axis=-1)
-    
-    dataset_size, discretization_points, _ = solutions.shape
-    h = (max(x) - min(x))/(discretization_points-1)
-    
-    potential = np.expand_dims(potentials, axis=2)*solutions**2
-    P = integrate_simpson(potential, h, axis=1)
-    K = E - P
-
-    kinetic_energy = np.sum(K[:, :N], axis=-1)
-    
-    return x, potentials, solutions, E, density, kinetic_energy, dataset_size, discretization_points, h    
-
-
-class InputPipeline(object):
-    def __init__(self, N, dataset_file, is_training=False):
-        import pickle
-        self.is_training = is_training
-
-        with open(dataset_file, 'rb') as f:
-            self.x, self.potentials, _, self.energies, self.densities, self.kenergies, self.M, self.G, self.h = unpack_dataset(N, pickle.load(f))
-        self.derivatives = -self.potentials
-
-    def input_fn(self, params):
-        import tensorflow as tf
-
-        dataset_densities = tf.data.Dataset.from_tensor_slices(self.densities.astype(np.float32))
-        dataset_kenergies = tf.data.Dataset.from_tensor_slices(self.kenergies.astype(np.float32))
-        dataset_derivatives = tf.data.Dataset.from_tensor_slices(self.derivatives.astype(np.float32))
-
-        dataset = tf.data.Dataset.zip((dataset_densities, tf.data.Dataset.zip((dataset_kenergies, dataset_derivatives))))
-
-        if self.is_training:
-            dataset = dataset.repeat()
-
-        if params['shuffle']:
-            dataset = dataset.shuffle(buffer_size=params['shuffle_buffer_size'], seed=params.get('seed', None))
-
-        dataset = dataset.batch(params['batch_size'], drop_remainder=True)
-        return dataset
-
-    def features_shape(self):
-        return self.densities.shape
-
-    def targets_shape(self):
-        return (self.kenergies.shape, self.derivatives.shape)
-
-    def __str__(self):
-        string = ''
-        if self.is_training:
-            string += 'Train Dataset: '
-        else:
-            string += 'Dataset: '
-            
-        string += str(self.densities.shape) + ' ' + str(self.kenergies.shape) + ' ' + str(self.derivatives.shape) + ' ' + str(self.densities.dtype)
-        return string
-
 
 def get_resolver():
     import os
@@ -98,7 +37,6 @@ def get_resolver():
 def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0)/ float(N))
     return cumsum[N:] - cumsum[:-N]
-
 
 def load_hyperparameters(file_hyperparams, run_name='default', globals=None):
     from ruamel.yaml import YAML
@@ -179,3 +117,80 @@ def anim_plot(array, x=None, interval=100, bar="", figsize=(15, 3), **kwargs):
 
     if not bar == "":
         widget.close()
+
+class QFDataset():
+    def __init__(self, dataset_file, params, set_h=False, set_shapes=False, set_mean=False):
+        import pickle
+
+        with open(dataset_file, 'rb') as f:
+            x, h, potential, wavefunctions, energies = pickle.load(f).values()
+            self.dataset_size, self.discretisation_points, self.max_N = wavefunctions.shape
+            assert(params['N'] <= self.max_N)
+            density = np.sum(np.square(wavefunctions)[:, :, :params['N']], axis=-1)
+
+            potential_energy_densities = np.expand_dims(potential, axis=2)*wavefunctions**2
+            potential_energies = np_integrate(potential_energy_densities, h, axis=1)
+            kinetic_energies = energies - potential_energies
+
+            energy = np.sum(energies[:, :params['N']], axis=-1)
+            kinetic_energy = np.sum(kinetic_energies[:, :params['N']], axis=-1)
+
+
+        if params['dtype'] == 'double' or params['dtype'] == 'float64':
+            if potential.dtype == np.float32:
+                raise ImportError("requested dtype={}, but dataset is saved with dtype={}, which is less precise.".format(params['dtype'], potential.dtype))
+            self.dtype = np.float64
+        elif params['dtype'] == 'float' or params['dtype'] == 'float32':
+            self.dtype = np.float32
+        else:
+            raise ValueError('unknown dtype {}'.format(params['dtype']))
+
+        self.x = x.astype(self.dtype)
+        self.h = h.astype(self.dtype)
+        self.potential = potential.astype(self.dtype)
+        self.density = density.astype(self.dtype)
+        self.energy = energy.astype(self.dtype)
+        self.kinetic_energy = kinetic_energy.astype(self.dtype)
+        self.derivative = -self.potential
+
+        if not 'features' in params or not 'targets' in params: 
+            return
+
+        self.features = {}
+        self.targets = {}
+
+        def add_by_name(dictionary, name):
+            if name == 'density':
+                dictionary['density'] = self.density
+            elif name == 'derivative':
+                dictionary['derivative'] = self.derivative
+            elif name == 'potential':
+                dictionary['potential'] = self.potential
+            elif name == 'kinetic_energy':
+                dictionary['kinetic_energy'] = self.kinetic_energy
+            else:
+                raise KeyError('feature/target {} does not exist or is not implemented.'.format(name))
+
+        for feature in params['features']:
+            add_by_name(self.features, feature)
+
+        for target in params['targets']:
+            add_by_name(self.targets, target)
+
+        if set_h:
+            params['h'] = self.h
+
+        if set_shapes:
+            params['features_shape'] = {name:feature.shape[1:] for name, feature in self.features.items()}
+            params['targets_shape'] = {name:target.shape[1:] for name, target in self.targets.items()}
+
+        if set_mean:
+            params['features_mean'] = {name:np.mean(feature, axis=0) for name, feature in self.features.items()}
+            params['targets_mean'] = {name:np.mean(target, axis=0) for name, target in self.targets.items()}
+
+
+    @property
+    def dataset(self):
+        import tensorflow as tf
+        return tf.data.Dataset.zip((tf.data.Dataset.zip({name:tf.data.Dataset.from_tensor_slices(feature) for name, feature in self.features.items()}), 
+                                    tf.data.Dataset.zip({name:tf.data.Dataset.from_tensor_slices(target) for name, target in self.targets.items()})))

@@ -1,5 +1,12 @@
 import numpy as np
-from quantumflow.calculus_utils import integrate, laplace, np_integrate
+
+def integrate(y, h):
+    return h*tf.reduce_sum((y[:, :-1] + y[:, 1:])/2., axis=1, name='trapezoidal_integral_approx')
+
+def laplace(data, h):  # time_axis=1
+    temp_laplace = 1 / h ** 2 * (data[:, :-2, :] + data[:, 2:, :] - 2 * data[:, 1:-1, :])
+    return tf.pad(temp_laplace, ((0, 0), (1, 1), (0, 0)), 'constant')
+
 
 def test_colab_devices():
     import os
@@ -121,6 +128,7 @@ def anim_plot(array, x=None, interval=100, bar="", figsize=(15, 3), **kwargs):
 class QFDataset():
     def __init__(self, dataset_file, params, set_h=False, set_shapes=False, set_mean=False):
         import pickle
+        import numpy as np
 
         with open(dataset_file, 'rb') as f:
             x, h, potential, wavefunctions, energies = pickle.load(f).values()
@@ -129,7 +137,7 @@ class QFDataset():
             density = np.sum(np.square(wavefunctions)[:, :, :params['N']], axis=-1)
 
             potential_energy_densities = np.expand_dims(potential, axis=2)*wavefunctions**2
-            potential_energies = np_integrate(potential_energy_densities, h, axis=1)
+            potential_energies = h * (np.sum(potential_energy_densities, axis=1) - 0.5 * (np.take(potential_energy_densities, 0, axis=1) + np.take(potential_energy_densities, -1, axis=1)))
             kinetic_energies = energies - potential_energies
 
             energy = np.sum(energies[:, :params['N']], axis=-1)

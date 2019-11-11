@@ -1,7 +1,7 @@
 import tensorflow as tf
 import os
 import pickle
-from quantumflow.colab_train_utils import load_hyperparameters
+from quantumflow.colab_utils import load_hyperparameters, integrate, laplace
 from quantumflow.numerov_solver import solve_schroedinger
 
 @tf.function
@@ -73,12 +73,3 @@ def generate_datasets(data_dir, experiment, generate_names):
             pickle.dump({'x': x.numpy(), 'h': h.numpy(), 'potential': potential.numpy(), 'wavefunctions': wavefunctions.numpy(), 'energies': energies.numpy()}, f)
 
         print("dataset", params['filename'] + '.pkl', "saved to", base_dir)
-
-
-def integrate(y, h):
-    return h*tf.reduce_sum((y[:, :-1] + y[:, 1:])/2., axis=1, name='trapezoidal_integral_approx')
-
-    
-def laplace(data, h):  # time_axis=1
-    temp_laplace = 1 / h ** 2 * (data[:, :-2, :] + data[:, 2:, :] - 2 * data[:, 1:-1, :])
-    return tf.pad(temp_laplace, ((0, 0), (1, 1), (0, 0)), 'constant')

@@ -1,5 +1,5 @@
 import tensorflow as tf
-from quantumflow.generate_datasets import integrate
+from quantumflow.colab_utils import integrate
 
 # recurrent tensorflow cell for solving the numerov equation recursively
 class ShootingNumerovCell(tf.keras.layers.AbstractRNNCell):

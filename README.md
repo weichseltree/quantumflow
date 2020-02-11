@@ -11,6 +11,8 @@ The required python packages are:
 tensorboard>=2.0.0
 matplotlib
 ruamel.yaml
+pandas
+scikit-learn
 ```
 
 Informations about some packages are available here:
@@ -22,20 +24,22 @@ If you use conda, you should be able to install the required packages like this:
 `conda install -c conda-forge tensorboard`
 `conda install -c conda-forge matplotlib`
 `conda install -c conda-forge ruamel.yaml`
+`conda install -c conda-forge pandas`
+`conda install -c conda-forge scikit-learn`
 
 ## Usage
 
-As a general rule, the notebooks should be run in the order of the numbers at the beginning of the filename. However, after generating the datasets and the shared files using all the files beginning with a 0 any other notebook should be able to run without having to run the others.
+As a general rule, the notebooks should be run in the order of the numbers at the beginning of the filename. However, after generating the datasets and the shared files, any other notebook should be able to run without having to run the others.
 
 ```
-0_define_helper_functions.ipynb
+0_create_shared_project_files.ipynb
 1a_generate_datasets.ipynb
 1b_recreate_dataset.ipynb
-1c_accuracy_checks_testing.ipynb
+1c_analyze_dataset.ipynb
 2_kernel_ridge_regession.ipynb
 ...
 ```
-The notebook `0_define_helper_functions.ipynb` will also write the shared `.py` files to a folder called `quantumflow` - if they dont exist already - that will be imported by the rest of the notebooks like a python module.
+The notebook `0_create_shared_project_files.ipynb` will write the shared `.py` files to a folder called `quantumflow` - if they dont exist already - that will be imported by the rest of the notebooks like a python module.
 
 All the files assume to be run with the current working directory being the folder they are in. Please make sure this is the case if you want to run the notebooks somewhere else.
 

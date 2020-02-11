@@ -22,9 +22,13 @@ https://ipywidgets.readthedocs.io/en/latest/user_install.htm
 If you use conda, you should be able to install the required packages like this:
 
 `conda install -c conda-forge tensorboard`
+
 `conda install -c conda-forge matplotlib`
+
 `conda install -c conda-forge ruamel.yaml`
+
 `conda install -c conda-forge pandas`
+
 `conda install -c conda-forge scikit-learn`
 
 ## Usage

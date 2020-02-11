@@ -1,7 +1,6 @@
 import tensorflow as tf
 import os
-import pickle
-from quantumflow.colab_utils import load_hyperparameters, integrate, laplace
+from quantumflow.utils import load_hyperparameters, integrate, laplace
 from quantumflow.numerov_solver import solve_schroedinger
 
 @tf.function
@@ -20,11 +19,10 @@ def generate_potentials(return_x=False,
     
     if dtype == 'double' or dtype == 'float64':
         dtype = tf.float64
-    elif dtype == 'float':
+    elif dtype == 'float' or dtype == 'float32':
         dtype = tf.float32
     else:
         raise ValueError('unknown dtype {}'.format(dtype))
-    
 
     x = tf.linspace(tf.constant(0.0, dtype=dtype), interval_length, discretisation_points, name="x")
 
@@ -63,13 +61,29 @@ def generate_datasets(data_dir, experiment, generate_names):
     for run_name in generate_names:
         params = load_hyperparameters(file_hyperparams, run_name=run_name, globals=globals())
 
-        tf.set_random_seed(params['seed'])
+        tf.keras.backend.clear_session()
+        tf.random.set_seed(params['seed'])
         potential, x, h = generate_potentials(return_x=True, return_h=True, **params)
 
         params['h'] = h
         energies, wavefunctions = solve_schroedinger(potential, params)
-        
-        with open(os.path.join(base_dir, params['filename'] + '.pkl'), 'wb') as f:
-            pickle.dump({'x': x.numpy(), 'h': h.numpy(), 'potential': potential.numpy(), 'wavefunctions': wavefunctions.numpy(), 'energies': energies.numpy()}, f)
 
-        print("dataset", params['filename'] + '.pkl', "saved to", base_dir)
+        save_dataset(base_dir, params['filename'], params['format'], x.numpy(), h.numpy(), potential.numpy(), wavefunctions.numpy(), energies.numpy())
+        print("dataset", params['filename'] + '.' + params['format'].replace('pickle', 'pkl'), "saved to", base_dir)
+
+def save_dataset(directory, filename, format, x, h, potential, wavefunctions, energies):
+        if format in ['pickle', 'pkl']:
+            import pickle
+            with open(os.path.join(directory, filename + '.pkl'), 'wb') as f:
+                pickle.dump({'x': x, 'h': h, 'potential': potential, 'wavefunctions': wavefunctions, 'energies': energies}, f)
+            
+        elif format in ['hdf5', 'h5']:
+            import h5py
+            with h5py.File(os.path.join(directory, filename + '.hdf5'), "w") as f:
+                f.attrs['x'] = x
+                f.attrs['h'] = h
+                f.create_dataset('potential', data=potential, compression="gzip")
+                f.create_dataset('wavefunctions', data=wavefunctions, compression="gzip")
+                f.create_dataset('energies', data=energies, compression="gzip")
+        else:
+            raise KeyError('Unknown format {} to save dataset.'.format(params['format']))

@@ -1,5 +1,5 @@
 import tensorflow as tf
-from quantumflow.colab_utils import integrate
+from quantumflow.utils import integrate
 
 # recurrent tensorflow cell for solving the numerov equation recursively
 class ShootingNumerovCell(tf.keras.layers.AbstractRNNCell):
@@ -27,7 +27,6 @@ class ShootingNumerovCell(tf.keras.layers.AbstractRNNCell):
         new_state = tf.stack([k_m1, inputs, y_m1, y], axis=-1)
         return y, new_state
 
-
 # tf function for using the shooting numerov method
 #
 # the numerov_init_slope is the slope of the solution at x=0
@@ -39,7 +38,7 @@ def shooting_numerov(k_squared, params):
     init_values = tf.zeros_like(k_squared[:, 0])
     one_step_values = numerov_init_slope * h * tf.ones_like(k_squared[:, 0])
     init_state = tf.stack([k_squared[:, 0], k_squared[:, 1], init_values, one_step_values], axis=-1)
-    outputs = tf.keras.layers.RNN(ShootingNumerovCell(k_squared.shape[2:], h), return_sequences=True)(k_squared[:, 2:], initial_state=init_state)
+    outputs = tf.keras.layers.RNN(ShootingNumerovCell(k_squared.shape[2:], h), return_sequences=True, dtype=params['dtype'])(k_squared[:, 2:], initial_state=init_state)
     output = tf.concat([tf.expand_dims(init_values, axis=1), tf.expand_dims(one_step_values, axis=1), outputs], axis=1)
     return output
 
@@ -47,7 +46,7 @@ def shooting_numerov(k_squared, params):
 # returns the rearranged schroedinger equation term in the numerov equation
 # k_squared = 2*m_e/h_bar**2*(E - V(x))
 def numerov_k_squared(potentials, energies):
-    return 2 * (tf.expand_dims(energies, axis=1) - tf.repeat(tf.expand_dims(potentials, axis=2), energies.shape[1], axis=2))
+    return 2 * (tf.expand_dims(energies, axis=1) - tf.tile(tf.expand_dims(potentials, axis=2), [1, 1, energies.shape[1]]))
 
 
 @tf.function
@@ -57,10 +56,10 @@ def find_split_energies(potentials, params):
 
     # Knotensatz: number of roots = quantum state
     # so target root = target excited state quantum number
-    target_roots = tf.repeat(tf.expand_dims(tf.range(N + 1), axis=0), M, axis=0)
+    target_roots = tf.tile(tf.expand_dims(tf.range(N + 1), axis=0), [M, 1])
 
     # lowest value of potential as lower bound
-    E_split = tf.repeat(tf.expand_dims(tf.reduce_min(potentials, axis=1), axis=1), N + 1, axis=1)
+    E_split = tf.tile(tf.expand_dims(tf.reduce_min(potentials, axis=1), axis=1), [1, N + 1])
 
     solutions_split = tf.zeros((potentials.shape[0], potentials.shape[1], N + 1), dtype=potentials.dtype)
     not_converged = tf.ones(potentials.shape[0], dtype=tf.bool)
@@ -149,7 +148,7 @@ def solve_schroedinger(potentials, params):
     
     E_split = find_split_energies(potentials, params)
 
-    target_roots = tf.repeat(tf.expand_dims(tf.range(N), axis=0), M, axis=0)
+    target_roots = tf.tile(tf.expand_dims(tf.range(N), axis=0), [M, 1])
     solutions_forward, E_forward, invalid_forward = solve_numerov(potentials, target_roots, E_split, params)
     #solutions_forward /= tf.expand_dims(tf.reduce_max(tf.abs(solutions_forward)*tf.cast(tf.logical_not(invalid_forward), tf.double), axis=1), axis=1)
 

@@ -5,6 +5,24 @@ This project can be run locally or on the cloud in Google Colab. To install, dow
 
 The notebooks are best set to use a GPU instance in Google Colab. Note that every notebook will need create own VM to run in. You should close unused Sessions via Runtime->Manage Sessions.
 
+The required python packages are:
+
+```
+tensorboard>=2.0.0
+matplotlib
+ruamel.yaml
+```
+
+Informations about some packages are available here:
+https://www.tensorflow.org/install
+https://ipywidgets.readthedocs.io/en/latest/user_install.htm
+
+If you use conda, you should be able to install the required packages like this:
+
+`conda install -c conda-forge tensorboard`
+`conda install -c conda-forge matplotlib`
+`conda install -c conda-forge ruamel.yaml`
+
 ## Usage
 
 As a general rule, the notebooks should be run in the order of the numbers at the beginning of the filename. However, after generating the datasets and the shared files using all the files beginning with a 0 any other notebook should be able to run without having to run the others.

@@ -1,9 +1,9 @@
 # QuantumFlow
 
 ## Installation
-This project can be run locally or on the cloud in Google Colab. To install, download the repository to your computer or into Google Drive. The default folder on Google Drive is **Projects/QuantumFlow**. If you want to save if in any other folder you will have to change the first code cells in the notebooks to use your path.
+This project can be run locally or on the cloud in Google Colab. To install, download the repository to your computer or into Google Drive. The default folder on Google Drive is **Projects/QuantumFlow**. If you want to save it in any other folder you will have to change the variable `notebook_path` in the first code cell in every notebooks to your path.
 
-Some notebooks are best set to use a GPU instance in Google Colab. Note that every notebook will need create its own VM to run in. You should close unused Sessions via Runtime->Manage Sessions.
+Some notebooks are best set to use a GPU instance in Google Colab. Note that every notebook will need create its own VM to run in. You should close unused sessions via Runtime->Manage Sessions.
 
 The required python packages are:
 
@@ -43,7 +43,7 @@ As a general rule, the notebooks should be run in the order of the numbers at th
 2_kernel_ridge_regession.ipynb
 ...
 ```
-The notebook `0_create_shared_project_files.ipynb` will write the shared `.py` files to a folder called `quantumflow` - if they dont exist already - that will be imported by the rest of the notebooks like a python module.
+The notebook `0_create_shared_project_files.ipynb` will write the shared `.py` files to a folder called `quantumflow` - if they dont exist already. They will be imported by the rest of the notebooks as the python module `quantumflow`.
 
 All the files assume to be run with the current working directory being the folder they are in. Please make sure this is the case if you want to run the notebooks somewhere else.
 

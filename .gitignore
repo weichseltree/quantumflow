@@ -107,5 +107,4 @@ venv.bak/
 .idea
 
 data/*
-!data/paper_potentials.txt
-!data/sample_potential.png
+!data/datasets/

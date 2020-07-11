@@ -4,7 +4,7 @@ from quantumflow.utils import integrate
 # recurrent tensorflow cell for solving the numerov equation recursively
 class ShootingNumerovCell(tf.keras.layers.AbstractRNNCell):
     def __init__(self, shape, h, **kwargs):
-        super(ShootingNumerovCell, self).__init__(**kwargs)
+        super(ShootingNumerovCell, self).__init__(autocast=False, **kwargs)
         self._h2_scaled = 1 / 12 * h ** 2
         self.shape = shape
 
@@ -46,7 +46,7 @@ def shooting_numerov(k_squared, params):
 # returns the rearranged schroedinger equation term in the numerov equation
 # k_squared = 2*m_e/h_bar**2*(E - V(x))
 def numerov_k_squared(potentials, energies):
-    return 2 * (tf.expand_dims(energies, axis=1) - tf.tile(tf.expand_dims(potentials, axis=2), [1, 1, energies.shape[1]]))
+    return 2 * (tf.expand_dims(energies, axis=1) - tf.repeat(tf.expand_dims(potentials, axis=2), energies.shape[1], axis=2))
 
 
 @tf.function
@@ -56,10 +56,10 @@ def find_split_energies(potentials, params):
 
     # Knotensatz: number of roots = quantum state
     # so target root = target excited state quantum number
-    target_roots = tf.tile(tf.expand_dims(tf.range(N + 1), axis=0), [M, 1])
+    target_roots = tf.repeat(tf.expand_dims(tf.range(N + 1), axis=0), M, axis=0)
 
     # lowest value of potential as lower bound
-    E_split = tf.tile(tf.expand_dims(tf.reduce_min(potentials, axis=1), axis=1), [1, N + 1])
+    E_split = tf.repeat(tf.expand_dims(tf.reduce_min(potentials, axis=1), axis=1), N + 1, axis=1)
 
     solutions_split = tf.zeros((potentials.shape[0], potentials.shape[1], N + 1), dtype=potentials.dtype)
     not_converged = tf.ones(potentials.shape[0], dtype=tf.bool)
@@ -96,7 +96,6 @@ def find_split_energies(potentials, params):
 
 def detect_roots(array):
     return tf.logical_or(tf.equal(array[:, 1:], 0), array[:, 1:] * array[:, :-1] < 0)
-
 
 @tf.function
 def solve_numerov(potentials, target_roots, split_energies, params):
@@ -148,7 +147,7 @@ def solve_schroedinger(potentials, params):
     
     E_split = find_split_energies(potentials, params)
 
-    target_roots = tf.tile(tf.expand_dims(tf.range(N), axis=0), [M, 1])
+    target_roots = tf.repeat(tf.expand_dims(tf.range(N), axis=0), M, axis=0)
     solutions_forward, E_forward, invalid_forward = solve_numerov(potentials, target_roots, E_split, params)
     #solutions_forward /= tf.expand_dims(tf.reduce_max(tf.abs(solutions_forward)*tf.cast(tf.logical_not(invalid_forward), tf.double), axis=1), axis=1)
 

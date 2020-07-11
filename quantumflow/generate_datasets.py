@@ -1,6 +1,7 @@
 import tensorflow as tf
+import numpy as np
 import os
-from quantumflow.utils import load_hyperparameters, integrate, laplace
+from quantumflow.utils import load_hyperparameters, integrate
 from quantumflow.numerov_solver import solve_schroedinger
 
 @tf.function
@@ -66,9 +67,24 @@ def generate_datasets(data_dir, experiment, generate_names):
         potential, x, h = generate_potentials(return_x=True, return_h=True, **params)
 
         params['h'] = h
-        energies, wavefunctions = solve_schroedinger(potential, params)
 
-        save_dataset(base_dir, params['filename'], params['format'], x.numpy(), h.numpy(), potential.numpy(), wavefunctions.numpy(), energies.numpy())
+        energies_batches = []
+        wavefunctions_batches = []
+
+        for i in range(params['dataset_size']//params['batch_size']):
+            energies, wavefunctions = solve_schroedinger(potential[i*params['batch_size']:(i+1)*params['batch_size']], params)
+            energies_batches.append(energies.numpy())
+            wavefunctions_batches.append(wavefunctions.numpy())
+
+        if params['dataset_size'] % params['batch_size']:
+            energies, wavefunctions = solve_schroedinger(potential[(params['dataset_size']//params['batch_size'])*params['batch_size']:], params)
+            energies_batches.append(energies.numpy())
+            wavefunctions_batches.append(wavefunctions.numpy())
+    
+        energies = np.concatenate(energies_batches, axis=0)
+        wavefunctions = np.concatenate(wavefunctions_batches, axis=0)
+
+        save_dataset(base_dir, params['filename'], params['format'], x.numpy(), h.numpy(), potential.numpy(), wavefunctions, energies)
         print("dataset", params['filename'] + '.' + params['format'].replace('pickle', 'pkl'), "saved to", base_dir)
 
 def save_dataset(directory, filename, format, x, h, potential, wavefunctions, energies):

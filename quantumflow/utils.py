@@ -1,42 +1,75 @@
 import os
 import tensorflow as tf
 import numpy as np
+import h5py
+
+def save_hdf5(filename, datasets, attrs=None, compression="gzip"):
+
+    with h5py.File(filename, "w") as f:
+        if attrs is not None:
+            for attr_name, attr_data in attrs.items():
+                f.attrs[attr_name] = attr_data
+
+        for array_name, array_data in datasets.items():
+            f.create_dataset(array_name, data=array_data, compression=compression)
+
+def load_hdf5(filename):
+    with h5py.File(filename, 'r') as f:
+        attrs = dict(f.attrs)
+        array_dict = {key:f[key][()] for key in f.keys()}
+
+    if len(attrs) == 0:
+        return array_dict
+    else:
+        return array_dict, attrs
+
 
 def integrate(y, h):
     return h*tf.reduce_sum((y[:, :-1] + y[:, 1:])/2., axis=1, name='trapezoidal_integral_approx')
 
-def laplace(data, h):  # time_axis=1
-    temp_laplace = 1 / h ** 2 * (data[:, :-2, :] + data[:, 2:, :] - 2 * data[:, 1:-1, :])
-    return tf.pad(temp_laplace, ((0, 0), (1, 1), (0, 0)), 'constant')
+
+def np_integrate(integrand, h, axis=1):
+    return h * (np.sum(integrand, axis=axis) - 0.5 * (np.take(integrand, 0, axis=axis) + np.take(integrand, -1, axis=axis)))
 
 
-def derivative_five_point(density, h):
-    return tf.concat([1/(2*h)*(density[:, 2:3] - density[:, 0:1]), 
-                      1/(12*h)*(-density[:, 4:] + 8*density[:, 3:-1] - 8*density[:, 1:-3] + density[:, 0:-4]),
-                      1/(2*h)*(density[:, -1:] - density[:, -3:-2])], axis=1)
+def derivative_five_point(value, h):
+    return tf.concat([1/(12*h)*(- 25*value[:, 0:1] + 48*value[:, 1:2] - 36*value[:, 2:3] + 16*value[:, 3:4] - 3*value[:, 4:5]),
+                      1/(12*h)*( - 3*value[:, 0:1] - 10*value[:, 1:2] + 18*value[:, 2:3] - 6*value[:, 3:4] + value[:, 4:5]), 
+                      1/(12*h)*(    value[:, 0:-4] - 8*value[:, 1:-3]                                + 8*value[:, 3:-1] - value[:, 4:]),
+                      1/(12*h)*(  - value[:, -5:-4] + 6*value[:, -4:-3] - 18*value[:, -3:-2] + 10*value[:, -2:-1] + 3*value[:, -1:]),
+                      1/(12*h)*(3*value[:, -5:-4] - 16*value[:, -4:-3] + 36*value[:, -3:-2] - 48*value[:, -2:-1] + 25*value[:, -1:])], axis=1)
 
-def laplace_five_point(density, h):
-    return 1/(12*h**2)*(-density[:, 4:] + 16*density[:, 3:-1] - 30*density[:, 2:-2] + 16*density[:, 1:-3] - density[:, 0:-4])
+
+def laplace_five_point(value, h):
+    return tf.concat([1/(h**2)*(2*value[:, 0:1] - 5*value[:, 1:2] + 4*value[:, 2:3] - 1*value[:, 3:4]),
+                       1/(12*h**2)*(11*value[:, 0:1] - 20*value[:, 1:2] + 6*value[:, 2:3] + 4*value[:, 3:4] - 1*value[:, 4:5]),
+                       1/(12*h**2)*(-value[:, 4:] + 16*value[:, 3:-1] - 30*value[:, 2:-2] + 16*value[:, 1:-3] - value[:, 0:-4]),
+                       1/(12*h**2)*(11*value[:, -1:] - 20*value[:, -2:-1] + 6*value[:, -3:-2] + 4*value[:, -4:-3] - 1*value[:, -5:-4]),
+                       1/(h**2)*(2*value[:, -1:] - 5*value[:, -2:-1] + 4*value[:, -3:-2] - 1*value[:, -4:-3])], axis=1)
 
 
-def weizsaecker_functional(density, h):
-    derivative_density = derivative_five_point(density, h)
-    inverse_density = 1/density[:, 1:-1]
+def weizsaecker_pseudo_integrand(pseudo, h):
+    return 1/2*tf.square(derivative_five_point(pseudo, h))
 
-    weizsaecker_kinetic_energy_density = wked = 1/8*derivative_density**2*inverse_density
-    weizsaecker_kinetic_energy_density = tf.concat([2*wked[:, 0:1] - wked[:, 1:2], wked, 2*wked[:, -1:] - wked[:, -2:-1]], axis=1)
 
-    return integrate(weizsaecker_kinetic_energy_density, h)
+def weizsaecker_pseudo_functional(pseudo, h):
+    return integrate(weizsaecker_pseudo_integrand(pseudo, h), h)
 
-def weizsaecker_functional_derivative(density, h):
-    derivative_density = derivative_five_point(density, h)[:, 1:-1]
-    laplace_density = laplace_five_point(density, h)
-    inverse_density = 1/density[:, 2:-2]
 
-    weizsaecker_kinetic_energy_functional_derivative = wkefd = 1/8*(derivative_density*inverse_density)**2 - 1/4*laplace_density*inverse_density
-    weizsaecker_kinetic_energy_functional_derivative = tf.concat([3*wkefd[:, 0:1] - 2*wkefd[:, 1:2], 2*wkefd[:, 0:1] - wkefd[:, 1:2], wkefd, 2*wkefd[:, -1:] - wkefd[:, -2:-1], 3*wkefd[:, -1:] - 2*wkefd[:, -2:-1]], axis=1)
+def weizsaecker_pseudo_functional_derivative(pseudo, h):
+    return -laplace_five_point(pseudo, h)
 
-    return weizsaecker_kinetic_energy_functional_derivative
+
+def normalize(function, h):
+    integral = integrate(function**2, h)
+    function /= tf.sqrt(tf.expand_dims(integral, axis=1))
+    return function
+
+
+def normalize_density(density, h):
+    integral = integrate(density, h)
+    density /= tf.expand_dims(integral, axis=1)
+    return density
 
 
 def load_hyperparameters(file_hyperparams, run_name='default', globals=None):
@@ -124,14 +157,12 @@ def calculate_density_and_energies(potential, wavefunctions, energies, N, h):
     assert(N <= wavefunctions.shape[2])
     density = np.sum(np.square(wavefunctions)[:, :, :N], axis=-1)
 
-    lpwf = 1/(12*h**2)*(-wavefunctions[:, 4:] + 16*wavefunctions[:, 3:-1] - 30*wavefunctions[:, 2:-2] + 16*wavefunctions[:, 1:-3] - wavefunctions[:, 0:-4])
-    laplace_wavefunctions = tf.concat([3*lpwf[:, 0:1] - 2*lpwf[:, 1:2], 2*lpwf[:, 0:1] - lpwf[:, 1:2], lpwf, 2*lpwf[:, -1:] - lpwf[:, -2:-1], 3*lpwf[:, -1:] - 2*lpwf[:, -2:-1]], axis=1) 
-
-    kinetic_energy_densities = -0.5*wavefunctions*laplace_wavefunctions
+    kinetic_energy_densities = 0.5*derivative_five_point(wavefunctions, h)**2 # == -0.5*wavefunctions*laplace_five_point(wavefunctions)
+    
     potential_energy_densities = np.expand_dims(potential, axis=2)*wavefunctions**2
     
-    potential_energies = h * (np.sum(potential_energy_densities, axis=1) - 0.5 * (np.take(potential_energy_densities, 0, axis=1) + np.take(potential_energy_densities, -1, axis=1)))
-    kinetic_energies = h * (np.sum(kinetic_energy_densities, axis=1) - 0.5 * (np.take(kinetic_energy_densities, 0, axis=1) + np.take(kinetic_energy_densities, -1, axis=1)))
+    potential_energies = np_integrate(potential_energy_densities, h)
+    kinetic_energies = np_integrate(kinetic_energy_densities, h)
 
     energy = np.sum(energies[:, :N], axis=-1)
     potential_energy = np.sum(potential_energies[:, :N], axis=-1)
@@ -147,12 +178,17 @@ def calculate_system_properties(potential, wavefunctions, energies, N, h):
     assert(N <= wavefunctions.shape[2])
 
     density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density = calculate_density_and_energies(potential, wavefunctions, energies, N, h)
-    derivative = -potential
+    derivative = np.expand_dims(energy/N, axis=1) - potential
 
-    vW_kinetic_energy = weizsaecker_functional(density, h).numpy()
-    vW_derivative = weizsaecker_functional_derivative(density, h).numpy()
+    pseudo = np.sqrt(density)
+    vW_kinetic_energy_density = weizsaecker_pseudo_integrand(pseudo, h).numpy()
+    vW_kinetic_energy = weizsaecker_pseudo_functional(pseudo, h).numpy()
+    vW_pseudo_derivative = weizsaecker_pseudo_functional_derivative(pseudo, h).numpy()
+    
+    vW_derivative = vW_pseudo_derivative[:, 1:-1]/(2*pseudo[:, 1:-1])
+    vW_derivative = np.concatenate([vW_derivative[:, 0:1], vW_derivative, vW_derivative[:, -1:]], axis=1)
 
-    return density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density, derivative, vW_kinetic_energy, vW_derivative
+    return density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density, derivative, vW_kinetic_energy, vW_kinetic_energy_density, vW_derivative
 
 
 class QFDataset():
@@ -176,18 +212,19 @@ class QFDataset():
             raise NotImplementedError('File extension missing or not supported.')  
 
         if params['N'] == 'all':
-            all_data = [calculate_system_properties(potential, wavefunctions, energies, N, h) for N in range(1, energies.shape[1]+1)]
-            density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density, derivative, vW_kinetic_energy, vW_derivative = \
+            all_data = [calculate_system_properties(potential, wavefunctions, energies, N, h) for N in range(1, wavefunctions.shape[2]+1)]
+            density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density, derivative, vW_kinetic_energy, vW_kinetic_energy_density, vW_derivative = \
                 [np.concatenate([all_data[i][j] for i in range(len(all_data))], axis=0) for j in range(len(all_data[0]))]
         else:
-            density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density, derivative, vW_kinetic_energy, vW_derivative = \
+            density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density, derivative, vW_kinetic_energy, vW_kinetic_energy_density, vW_derivative = \
                 calculate_system_properties(potential, wavefunctions, energies, params['N'], h)
             
         self.dataset_size, self.discretisation_points = density.shape
 
         if params.get('subtract_von_weizsaecker', False):
-            kinetic_energy -= params.get('von_weizsaecker_factor', 1.0)*vW_kinetic_energy
-            derivative -= params.get('von_weizsaecker_factor', 1.0)*vW_derivative
+            kinetic_energy -= vW_kinetic_energy
+            kinetic_energy_density -= vW_kinetic_energy_density
+            derivative -= vW_derivative
             
         if params['dtype'] == 'double' or params['dtype'] == 'float64':
             if potential.dtype == np.float32:
@@ -202,6 +239,7 @@ class QFDataset():
         self.h = h.astype(self.dtype)
         self.potential = potential.astype(self.dtype)
         self.density = density.astype(self.dtype)
+        self.pseudo = np.sqrt(density).astype(self.dtype)
         self.energy = energy.astype(self.dtype)
         self.potential_energy = potential_energy.astype(self.dtype)
         self.kinetic_energy = kinetic_energy.astype(self.dtype)
@@ -209,6 +247,7 @@ class QFDataset():
         self.kinetic_energy_density = kinetic_energy_density.astype(self.dtype)
         self.derivative = derivative.astype(self.dtype)
         self.vW_kinetic_energy = vW_kinetic_energy.astype(self.dtype)
+        self.vW_kinetic_energy_density = vW_kinetic_energy_density.astype(self.dtype)
         self.vW_derivative = vW_derivative.astype(self.dtype)
 
         if not 'features' in params or not 'targets' in params: 
@@ -218,16 +257,8 @@ class QFDataset():
         self.targets = {}
 
         def add_by_name(dictionary, name):
-            if name == 'density':
-                dictionary['density'] = self.density
-            elif name == 'derivative':
-                dictionary['derivative'] = self.derivative
-            elif name == 'potential':
-                dictionary['potential'] = self.potential
-            elif name == 'kinetic_energy':
-                dictionary['kinetic_energy'] = self.kinetic_energy
-            elif name == 'kinetic_energy_density':
-                dictionary['kinetic_energy_density'] = self.kinetic_energy_density
+            if hasattr(self, name):
+                dictionary[name] = getattr(self, name)
             else:
                 raise KeyError('feature/target {} does not exist or is not implemented.'.format(name))
 
@@ -237,7 +268,7 @@ class QFDataset():
         for target in params['targets']:
             add_by_name(self.targets, target)
 
-    def get_params(self, shapes=True, h=True, mean=False):
+    def get_params(self, shapes=True, h=True, mean=False, full=False):
         import numpy as np
 
         params = {}
@@ -251,6 +282,10 @@ class QFDataset():
         if mean:
             params['features_mean'] = {name:np.mean(feature, axis=0) for name, feature in self.features.items()}
             params['targets_mean'] = {name:np.mean(target, axis=0) for name, target in self.targets.items()}
+
+        if full:
+            params['features'] = {name:feature for name, feature in self.features.items()}
+            params['targets'] = {name:target for name, target in self.targets.items()}
 
         return params
 
@@ -328,7 +363,7 @@ def run_multiple(experiment, run_name, data_dir='../data'):
 def build_model(params, data_dir='../data', dataset_train=None):
     if dataset_train is None:
         dataset_train = QFDataset(os.path.join(data_dir, params['dataset_train']), params)
-        params['dataset'] = dataset_train.get_params(shapes=True, h=True, mean=True)
+        params['dataset'] = dataset_train.get_params(**params['dataset_info'])
     
     tf.keras.backend.clear_session()
     return params['model'](params)
@@ -336,7 +371,7 @@ def build_model(params, data_dir='../data', dataset_train=None):
 def train(params, model_dir=None, data_dir='../data', callbacks=None):
     dataset_train = QFDataset(os.path.join(data_dir, params['dataset_train']), params)
     dataset_validate = QFDataset(os.path.join(data_dir, params['dataset_validate']), params) if 'dataset_validate' in params else None
-    params['dataset'] = dataset_train.get_params(shapes=True, h=True, mean=True)
+    params['dataset'] = dataset_train.get_params(**params['dataset_info'])
 
     tf.keras.backend.clear_session()
     if 'seed' in params:

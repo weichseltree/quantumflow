@@ -32,13 +32,11 @@ class ShootingNumerovCell(tf.keras.layers.AbstractRNNCell):
 # the numerov_init_slope is the slope of the solution at x=0
 # it can be constant>0 because it's actual value will be determined when the wavefunction is normalized
 #
-def shooting_numerov(k_squared, params):
-    h = params['h']
-    numerov_init_slope = params['numerov_init_slope']
+def shooting_numerov(k_squared, h, numerov_init_slope, dtype):
     init_values = tf.zeros_like(k_squared[:, 0])
     one_step_values = numerov_init_slope * h * tf.ones_like(k_squared[:, 0])
     init_state = tf.stack([k_squared[:, 0], k_squared[:, 1], init_values, one_step_values], axis=-1)
-    outputs = tf.keras.layers.RNN(ShootingNumerovCell(k_squared.shape[2:], h), return_sequences=True, dtype=params['dtype'])(k_squared[:, 2:], initial_state=init_state)
+    outputs = tf.keras.layers.RNN(ShootingNumerovCell(k_squared.shape[2:], h), return_sequences=True, dtype=dtype)(k_squared[:, 2:], initial_state=init_state)
     output = tf.concat([tf.expand_dims(init_values, axis=1), tf.expand_dims(one_step_values, axis=1), outputs], axis=1)
     return output
 
@@ -50,9 +48,8 @@ def numerov_k_squared(potentials, energies):
 
 
 @tf.function
-def find_split_energies(potentials, params):
+def find_split_energies(potentials, N, h, dtype, numerov_init_slope):
     M = potentials.shape[0]
-    N = params['n_orbitals']
 
     # Knotensatz: number of roots = quantum state
     # so target root = target excited state quantum number
@@ -69,7 +66,7 @@ def find_split_energies(potentials, params):
     while tf.math.reduce_any(not_converged):
         V_split = numerov_k_squared(tf.boolean_mask(potentials, not_converged), tf.boolean_mask(E_split, not_converged))
 
-        solutions_split_new = shooting_numerov(V_split, params)
+        solutions_split_new = shooting_numerov(V_split, h, numerov_init_slope, dtype)
 
         partitioned_data = tf.dynamic_partition(solutions_split, tf.cast(not_converged, tf.int32) , 2)
         condition_indices = tf.dynamic_partition(tf.range(tf.shape(solutions_split)[0]), tf.cast(not_converged, tf.int32) , 2)
@@ -98,7 +95,7 @@ def detect_roots(array):
     return tf.logical_or(tf.equal(array[:, 1:], 0), array[:, 1:] * array[:, :-1] < 0)
 
 @tf.function
-def solve_numerov(potentials, target_roots, split_energies, params):
+def solve_numerov(potentials, target_roots, split_energies, h, numerov_init_slope, dtype):
     E_low = split_energies[:, :-1]
     E_high = split_energies[:, 1:]
 
@@ -112,7 +109,7 @@ def solve_numerov(potentials, target_roots, split_energies, params):
     while tf.reduce_any(tf.logical_not(tf.equal(E_last, E))):
         V = numerov_k_squared(potentials, E)
 
-        solutions = shooting_numerov(V, params)
+        solutions = shooting_numerov(V, h, numerov_init_slope, dtype)
         roots = tf.reduce_sum(tf.cast(detect_roots(solutions), tf.int32), axis=1)
 
         update_low = roots <= target_roots
@@ -124,10 +121,10 @@ def solve_numerov(potentials, target_roots, split_energies, params):
         E_last = E
         E = 0.5 * (E_low + E_high)
 
-    solutions_low = shooting_numerov(numerov_k_squared(potentials, E_low), params)
+    solutions_low = shooting_numerov(numerov_k_squared(potentials, E_low), h, numerov_init_slope, dtype)
     roots_low = tf.cast(detect_roots(solutions_low), tf.double)
 
-    solutions_high = shooting_numerov(numerov_k_squared(potentials, E_high), params)
+    solutions_high = shooting_numerov(numerov_k_squared(potentials, E_high), h, numerov_init_slope, dtype)
     roots_high = tf.cast(detect_roots(solutions_high), tf.double)
 
     roots_diff = tf.abs(roots_high - roots_low)  
@@ -140,18 +137,17 @@ def solve_numerov(potentials, target_roots, split_energies, params):
 
 
 @tf.function
-def solve_schroedinger(potentials, params):
+def solve_schroedinger(potentials, N, h, dtype, numerov_init_slope):
     M = potentials.shape[0]
     G = potentials.shape[1]
-    N = params['n_orbitals']
     
-    E_split = find_split_energies(potentials, params)
+    E_split = find_split_energies(potentials, N, h, dtype, numerov_init_slope)
 
     target_roots = tf.repeat(tf.expand_dims(tf.range(N), axis=0), M, axis=0)
-    solutions_forward, E_forward, invalid_forward = solve_numerov(potentials, target_roots, E_split, params)
+    solutions_forward, E_forward, invalid_forward = solve_numerov(potentials, target_roots, E_split, h, numerov_init_slope, dtype)
     #solutions_forward /= tf.expand_dims(tf.reduce_max(tf.abs(solutions_forward)*tf.cast(tf.logical_not(invalid_forward), tf.double), axis=1), axis=1)
 
-    solutions_backward, E_backward, invalid_backward = solve_numerov(tf.reverse(potentials, axis=[1]), target_roots, E_split, params)
+    solutions_backward, E_backward, invalid_backward = solve_numerov(tf.reverse(potentials, axis=[1]), target_roots, E_split, h, numerov_init_slope, dtype)
     solutions_backward = tf.reverse(solutions_backward, axis=[1])
     invalid_backward = tf.reverse(invalid_backward, axis=[1])
     #solutions_backward /= tf.expand_dims(tf.reduce_max(tf.abs(solutions_backward)*tf.cast(tf.logical_not(invalid_backward), tf.double), axis=1), axis=1)
@@ -172,7 +168,7 @@ def solve_schroedinger(potentials, params):
 
     #normalization
     density = solutions ** 2
-    norm = integrate(density, params['h'])
+    norm = integrate(density, h)
     solutions *= 1 / tf.sqrt(tf.expand_dims(norm, axis=1))
 
     E = 0.5*(E_forward + E_backward)

@@ -1,8 +1,9 @@
 import tensorflow as tf
 import numpy as np
 import os
-from quantumflow.utils import load_hyperparameters, integrate
-from quantumflow.numerov_solver import solve_schroedinger
+
+import quantumflow
+import quantumflow.noninteracting_1d
 
 @tf.function
 def generate_potentials(return_x=False,
@@ -23,7 +24,7 @@ def generate_potentials(return_x=False,
     elif dtype == 'float' or dtype == 'float32':
         dtype = tf.float32
     else:
-        raise ValueError('unknown dtype {}'.format(dtype))
+        raise ValueError(f"unknown dtype {dtype}")
 
     x = tf.linspace(tf.constant(0.0, dtype=dtype), interval_length, discretisation_points, name="x")
 
@@ -39,7 +40,7 @@ def generate_potentials(return_x=False,
     elif n_method == 'mean':
         potentials = tf.reduce_mean(curves, -1, name="potentials")
     else:
-        raise NotImplementedError('Method {} is not implemented.'.format(n_method))
+        raise NotImplementedError(f"Method {n_method} is not implemented.")
 
     returns = [potentials]
 
@@ -51,41 +52,6 @@ def generate_potentials(return_x=False,
         returns += [h]
    
     return returns
-
-def generate_datasets(data_dir, experiment, generate_names):
-    if not isinstance(generate_names, list):
-        generate_names = [generate_names]
-
-    base_dir = os.path.join(data_dir, experiment)
-    file_hyperparams = os.path.join(base_dir, "hyperparams.config")
-
-    for run_name in generate_names:
-        params = load_hyperparameters(file_hyperparams, run_name=run_name, globals=globals())
-
-        tf.keras.backend.clear_session()
-        tf.random.set_seed(params['seed'])
-        potential, x, h = generate_potentials(return_x=True, return_h=True, **params)
-
-        params['h'] = h
-
-        energies_batches = []
-        wavefunctions_batches = []
-
-        for i in range(params['dataset_size']//params['batch_size']):
-            energies, wavefunctions = solve_schroedinger(potential[i*params['batch_size']:(i+1)*params['batch_size']], params)
-            energies_batches.append(energies.numpy())
-            wavefunctions_batches.append(wavefunctions.numpy())
-
-        if params['dataset_size'] % params['batch_size']:
-            energies, wavefunctions = solve_schroedinger(potential[(params['dataset_size']//params['batch_size'])*params['batch_size']:], params)
-            energies_batches.append(energies.numpy())
-            wavefunctions_batches.append(wavefunctions.numpy())
-    
-        energies = np.concatenate(energies_batches, axis=0)
-        wavefunctions = np.concatenate(wavefunctions_batches, axis=0)
-
-        save_dataset(base_dir, params['filename'], params['format'], x.numpy(), h.numpy(), potential.numpy(), wavefunctions, energies)
-        print("dataset", params['filename'] + '.' + params['format'].replace('pickle', 'pkl'), "saved to", base_dir)
 
 def save_dataset(directory, filename, format, x, h, potential, wavefunctions, energies):
         if format in ['pickle', 'pkl']:
@@ -102,4 +68,29 @@ def save_dataset(directory, filename, format, x, h, potential, wavefunctions, en
                 f.create_dataset('wavefunctions', data=wavefunctions, compression="gzip")
                 f.create_dataset('energies', data=energies, compression="gzip")
         else:
-            raise KeyError('Unknown format {} to save dataset.'.format(params['format']))
+            raise KeyError(f"Unknown format {format} to save dataset.")
+
+
+def generate_dataset(run_dir, filename, format, seed, dataset_size, batch_size, N, numerov_init_slope, dtype, **kwargs):
+    tf.keras.backend.clear_session()
+    tf.random.set_seed(seed)
+    potential, x, h = generate_potentials(return_x=True, return_h=True, dtype=dtype, **kwargs)
+
+    energies_batches = []
+    wavefunctions_batches = []
+
+    for i in range(dataset_size//batch_size):
+        energies, wavefunctions = quantumflow.noninteracting_1d.solve_schroedinger(potential[i*batch_size:(i+1)*batch_size], N, h, dtype, numerov_init_slope)
+        energies_batches.append(energies.numpy())
+        wavefunctions_batches.append(wavefunctions.numpy())
+
+    if dataset_size % batch_size:
+        energies, wavefunctions = quantumflow.noninteracting_1d.solve_schroedinger(potential[(dataset_size//batch_size)*batch_size:], N, h, dtype, numerov_init_slope)
+        energies_batches.append(energies.numpy())
+        wavefunctions_batches.append(wavefunctions.numpy())
+
+    energies = np.concatenate(energies_batches, axis=0)
+    wavefunctions = np.concatenate(wavefunctions_batches, axis=0)
+
+    save_dataset(run_dir, filename, format, x.numpy(), h.numpy(), potential.numpy(), wavefunctions, energies)
+    print(f"dataset {filename}.{format.replace('pickle', 'pkl')} saved to {run_dir}")

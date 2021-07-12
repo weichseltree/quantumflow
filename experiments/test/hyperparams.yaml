@@ -1,0 +1,593 @@
+resnet_100:
+  seed: 0
+
+  dataset_train: &DATASET_TRAIN_100
+    class: quantumflow.noninteracting_1d.DensityKineticEnergyDataset
+    experiment: snyder_2012
+    run_name: recreate_dataset
+    N: 1
+    dtype: float32
+    subtract_von_weizsaecker: True
+
+    features: 
+      - density
+
+    targets: 
+      - kinetic_energy
+      - kinetic_energy_density
+      - derivative
+
+  dataset_validate:
+    <<: *DATASET_TRAIN_100
+    run_name: train_dataset
+
+  model:
+    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
+    base_model:
+      class: quantumflow.noninteracting_1d.ResNet_KineticEnergyDensityFunctional
+
+      blocks: 
+        - &RESNET_RESNET_BLOCK_100
+          filters: [32, 32]
+          kernel_size: [100, 100]
+          padding: same
+          activation: softplus
+          add_input: True
+
+        - <<: *RESNET_RESNET_BLOCK_100
+
+        - <<: *RESNET_RESNET_BLOCK_100
+
+        - &RESNET_FINAL_BLOCK_100
+          filters: [1]
+          kernel_size: [100]
+          padding: same
+          activation: null
+          add_input: False
+
+  metrics: 
+    kinetic_energy: mean_absolute_error
+    kinetic_energy_density: mean_absolute_error
+    derivative: mean_absolute_error
+
+  loss: 
+    kinetic_energy: mean_squared_error
+    kinetic_energy_density: mean_squared_error
+    derivative: mean_squared_error
+
+  loss_weights:
+    kinetic_energy: 1.0
+    kinetic_energy_density: 1.0
+    derivative: 1.0
+
+  optimizer: 
+    class: quantumflow.utils.Adam
+    beta_1: 0.9
+    beta_2: 0.999
+    epsilon: 1e-07
+    amsgrad: False
+
+    clipnorm: 100.0
+
+    learning_rate: 
+      class: quantumflow.utils.WarmupExponentialDecay
+      initial_learning_rate: 0.0001
+      final_learning_rate: 0.0000000001
+      decay_rate: 0.9
+      decay_steps: 2000 # batches
+
+      cold_steps: 43700 # batches
+      warmup_steps: 0 # batches
+      cold_factor: 1.0
+
+  fit:
+    batch_size: 100
+    epochs: 20000
+    verbose: 0
+    #validation_split: 0.1
+    validation_freq: 1000 # epochs
+    shuffle: True
+    initial_epoch: 0
+
+  checkpoint:
+    filename: weights.{epoch:03d}.tf
+    save_freq: 20000 # samples
+    save_weights_only: True
+
+  tensorboard: 
+    class: CustomTensorBoard
+    histogram_freq: 10000 # epochs
+    metrics_freq: 100 # epochs
+    write_graph: True
+    write_images: True
+    update_freq: epoch
+    profile_batch: 0
+
+  save_model: False
+  export: True
+  export_model: model
+
+resnet_1000: &RESNET
+    load_checkpoint: null
+
+    N: 1
+    seed: 0
+    dtype: float32
+    dataset_train: datasets/dataset_large.hdf5
+    dataset_validate: datasets/dataset_validate.hdf5
+    dataset_info:
+        shapes: True
+        h: True
+
+    model: KineticEnergyFunctionalDerivativeModel
+    model_kwargs: &RESNET_MODEL_KWARGS
+        base_model: ResNet_KineticEnergyDensityFunctional
+        l2_regularisation: 0.000025
+        bias_mean_initialisation: False
+        batch_normalization: False
+
+        resnet_block_kwargs: &RESNET_RESNET_BLOCK
+            filters: [32, 32]
+            kernel_size: [100, 100]
+            padding: same
+            activation: softplus
+            add_input: True
+
+        final_block_kwargs: &RESNET_FINAL_BLOCK
+            filters: [1]
+            kernel_size: [100]
+            padding: same
+            activation: null
+            add_input: False
+
+        blocks: [<<: *RESNET_RESNET_BLOCK,
+                 <<: *RESNET_RESNET_BLOCK,
+                 <<: *RESNET_RESNET_BLOCK,
+                 <<: *RESNET_FINAL_BLOCK]
+                    
+
+    features: [density]
+    targets: [kinetic_energy, kinetic_energy_density, derivative]
+
+    metrics: 
+        kinetic_energy: mean_absolute_error
+        kinetic_energy_density: mean_absolute_error
+        derivative: mean_absolute_error
+
+    loss: 
+        kinetic_energy: mean_squared_error
+        kinetic_energy_density: mean_squared_error
+        derivative: mean_squared_error
+
+    loss_weights:
+        kinetic_energy: 1.0
+        kinetic_energy_density: 1.0
+        derivative: 1.0
+
+    optimizer: Adam
+    optimizer_kwargs:
+        learning_rate: WarmupExponentialDecay
+        beta_1: 0.9
+        beta_2: 0.999
+        epsilon: 1e-07
+        amsgrad: False
+
+        clipnorm: 100.0
+
+        learning_rate_kwargs:
+            initial_learning_rate: 0.0001
+            final_learning_rate: 0.0000000001
+            decay_rate: 0.9
+            decay_steps: 2000 # batches
+
+            cold_steps: 43700 # batches
+            warmup_steps: 0 # batches
+            cold_factor: 1.0
+
+    fit_kwargs:
+        batch_size: 100
+        epochs: 20000
+        verbose: 0
+        #validation_split: 0.1
+        validation_freq: 1000 # epochs
+        shuffle: True
+        initial_epoch: 0
+
+    checkpoint: True
+    checkpoint_kwargs:
+        filename: weights.{epoch:03d}.tf
+        save_freq: 20000 # samples
+        save_weights_only: True
+
+    tensorboard: CustomTensorBoard
+    tensorboard_kwargs:
+        histogram_freq: 10000 # epochs
+        metrics_freq: 100 # epochs
+        write_graph: True
+        write_images: True
+        update_freq: epoch
+        profile_batch: 0
+
+    save_model: False
+    export: True
+    export_model: model
+
+
+resnet_1000_steep: 
+    <<: *RESNET
+
+    optimizer: Adam
+    optimizer_kwargs:
+        learning_rate: WarmupExponentialDecay
+        beta_1: 0.9
+        beta_2: 0.999
+        epsilon: 1e-07
+        amsgrad: False
+
+        clipnorm: 100.0
+
+        learning_rate_kwargs:
+            initial_learning_rate: 0.0001
+            final_learning_rate: 0.0
+            decay_rate: 0.875
+            decay_steps: 1800 # batches
+
+            cold_steps: 43700 # batches
+            warmup_steps: 0 # batches
+            cold_factor: 1.0
+
+
+resnet_1000_longer: 
+    <<: *RESNET
+
+    optimizer: Adam
+    optimizer_kwargs:
+        learning_rate: WarmupExponentialDecay
+        beta_1: 0.9
+        beta_2: 0.999
+        epsilon: 1e-07
+        amsgrad: False
+
+        clipnorm: 100.0
+
+        learning_rate_kwargs:
+            initial_learning_rate: 0.0001
+            final_learning_rate: 0.0
+            decay_rate: 0.9
+            decay_steps: 2000 # batches
+
+            cold_steps: 40000 # batches
+            warmup_steps: 0 # batches
+            cold_factor: 1.0
+
+    fit_kwargs:
+        batch_size: 100
+        epochs: 25000
+        verbose: 0
+        #validation_split: 0.1
+        validation_freq: 1000 # epochs
+        shuffle: True
+        initial_epoch: 0
+
+
+resnet_1000_longerer: 
+    <<: *RESNET
+
+    optimizer: Adam
+    optimizer_kwargs:
+        learning_rate: WarmupExponentialDecay
+        beta_1: 0.9
+        beta_2: 0.999
+        epsilon: 1e-07
+        amsgrad: False
+
+        clipnorm: 100.0
+
+        learning_rate_kwargs:
+            initial_learning_rate: 0.0001
+            final_learning_rate: 0.0
+            decay_rate: 0.9
+            decay_steps: 2000 # batches
+
+            cold_steps: 40000 # batches
+            warmup_steps: 0 # batches
+            cold_factor: 1.0
+
+    fit_kwargs:
+        batch_size: 100
+        epochs: 30000
+        verbose: 0
+        #validation_split: 0.1
+        validation_freq: 1000 # epochs
+        shuffle: True
+        initial_epoch: 0
+
+
+resnet_vW_N2_1000_longerer: 
+    <<: *RESNET
+    N: 2
+    subtract_von_weizsaecker: True
+
+    optimizer: Adam
+    optimizer_kwargs:
+        learning_rate: WarmupExponentialDecay
+        beta_1: 0.9
+        beta_2: 0.999
+        epsilon: 1e-07
+        amsgrad: False
+
+        clipnorm: 100.0
+
+        learning_rate_kwargs:
+            initial_learning_rate: 0.0001
+            final_learning_rate: 0.0
+            decay_rate: 0.9
+            decay_steps: 2000 # batches
+
+            cold_steps: 40000 # batches
+            warmup_steps: 0 # batches
+            cold_factor: 1.0
+
+    fit_kwargs:
+        batch_size: 100
+        epochs: 30000
+        verbose: 0
+        #validation_split: 0.1
+        validation_freq: 1000 # epochs
+        shuffle: True
+        initial_epoch: 0
+
+    checkpoint: True
+    checkpoint_kwargs:
+        filename: weights.{epoch:03d}.tf
+        save_freq: 30000 # samples
+        save_weights_only: True
+
+
+resnet_vW_N2_1000_longerer_nf: 
+    <<: *RESNET
+    N: 2
+    normalize_features: True
+    subtract_von_weizsaecker: True
+
+    optimizer: Adam
+    optimizer_kwargs:
+        learning_rate: WarmupExponentialDecay
+        beta_1: 0.9
+        beta_2: 0.999
+        epsilon: 1e-07
+        amsgrad: False
+
+        clipnorm: 100.0
+
+        learning_rate_kwargs:
+            initial_learning_rate: 0.0001
+            final_learning_rate: 0.0
+            decay_rate: 0.9
+            decay_steps: 2000 # batches
+
+            cold_steps: 40000 # batches
+            warmup_steps: 0 # batches
+            cold_factor: 1.0
+
+    fit_kwargs:
+        batch_size: 100
+        epochs: 30000
+        verbose: 0
+        #validation_split: 0.1
+        validation_freq: 1000 # epochs
+        shuffle: True
+        initial_epoch: 0
+
+    checkpoint: True
+    checkpoint_kwargs:
+        filename: weights.{epoch:03d}.tf
+        save_freq: 30000 # samples
+        save_weights_only: True
+
+
+resnet_vW_N2_1000_longerer_nf_2: 
+    <<: *RESNET
+    N: 2
+    normalize_features: True
+    subtract_von_weizsaecker: True
+
+    optimizer: Adam
+    optimizer_kwargs:
+        learning_rate: WarmupExponentialDecay
+        beta_1: 0.9
+        beta_2: 0.999
+        epsilon: 1e-07
+        amsgrad: False
+
+        clipnorm: 100.0
+
+        learning_rate_kwargs:
+            initial_learning_rate: 0.0001
+            final_learning_rate: 0.0
+            decay_rate: 0.9
+            decay_steps: 2000 # batches
+
+            cold_steps: 40000 # batches
+            warmup_steps: 0 # batches
+            cold_factor: 1.0
+
+    fit_kwargs:
+        batch_size: 100
+        epochs: 30000
+        verbose: 0
+        #validation_split: 0.1
+        validation_freq: 1000 # epochs
+        shuffle: True
+        initial_epoch: 0
+
+    checkpoint: True
+    checkpoint_kwargs:
+        filename: weights.{epoch:03d}.tf
+        save_freq: 30000 # samples
+        save_weights_only: True
+
+
+resnet_vW_N2_10000: 
+    <<: *RESNET
+    dataset_train: datasets/dataset_larger.hdf5
+    N: 2
+    subtract_von_weizsaecker: True
+
+    optimizer: Adam
+    optimizer_kwargs:
+        learning_rate: WarmupExponentialDecay
+        beta_1: 0.9
+        beta_2: 0.999
+        epsilon: 1e-07
+        amsgrad: False
+
+        clipnorm: 100.0
+
+        learning_rate_kwargs:
+            initial_learning_rate: 0.0001
+            final_learning_rate: 0.0
+            decay_rate: 0.9
+            decay_steps: 2000 # batches
+
+            cold_steps: 40000 # batches
+            warmup_steps: 0 # batches
+            cold_factor: 1.0
+
+    fit_kwargs:
+        batch_size: 100
+        epochs: 3000
+        verbose: 0
+        #validation_split: 0.1
+        validation_freq: 100 # epochs
+        shuffle: True
+        initial_epoch: 0
+
+    checkpoint: True
+    checkpoint_kwargs:
+        filename: weights.{epoch:03d}.tf
+        save_freq: 30000 # samples
+        save_weights_only: True
+
+    tensorboard: CustomTensorBoard
+    tensorboard_kwargs:
+        histogram_freq: 1000 # epochs
+        metrics_freq: 10 # epochs
+        write_graph: True
+        write_images: True
+        update_freq: epoch
+        profile_batch: 0
+
+
+
+resnet_vW_N2_50000: &RESNET_50000
+    <<: *RESNET
+    dataset_train: datasets/dataset_huge.hdf5
+    N: 2
+    subtract_von_weizsaecker: True
+
+    optimizer: Adam
+    optimizer_kwargs:
+        learning_rate: WarmupExponentialDecay
+        beta_1: 0.9
+        beta_2: 0.999
+        epsilon: 1e-07
+        amsgrad: False
+
+        clipnorm: 100.0
+
+        learning_rate_kwargs:
+            initial_learning_rate: 0.0001
+            final_learning_rate: 0.0
+            decay_rate: 0.9
+            decay_steps: 2000 # batches
+
+            cold_steps: 40000 # batches
+            warmup_steps: 0 # batches
+            cold_factor: 1.0
+
+    fit_kwargs:
+        batch_size: 100
+        epochs: 600
+        verbose: 0
+        #validation_split: 0.1
+        validation_freq: 20 # epochs
+        shuffle: True
+        initial_epoch: 0
+
+    checkpoint: True
+    checkpoint_kwargs:
+        filename: weights.{epoch:03d}.tf
+        save_freq: 30000 # samples
+        save_weights_only: True
+
+    tensorboard: CustomTensorBoard
+    tensorboard_kwargs:
+        histogram_freq: 200 # epochs
+        metrics_freq: 2 # epochs
+        write_graph: True
+        write_images: True
+        update_freq: epoch
+        profile_batch: 0
+
+
+resnet_vW_N2_50000_l2: 
+    <<: *RESNET_50000
+    model_kwargs:
+        <<: *RESNET_MODEL_KWARGS
+        l2_regularisation: 0.00000025
+
+
+resnet_vW_N2_100000:
+    <<: *RESNET
+    dataset_train: datasets/dataset_huger.hdf5
+    N: 2
+    subtract_von_weizsaecker: True
+
+    model_kwargs:
+        <<: *RESNET_MODEL_KWARGS
+        l2_regularisation: 0.0000001
+
+    optimizer: Adam
+    optimizer_kwargs:
+        learning_rate: WarmupExponentialDecay
+        beta_1: 0.9
+        beta_2: 0.999
+        epsilon: 1e-07
+        amsgrad: False
+
+        clipnorm: 100.0
+
+        learning_rate_kwargs:
+            initial_learning_rate: 0.0001
+            final_learning_rate: 0.0
+            decay_rate: 0.9
+            decay_steps: 2000 # batches
+
+            cold_steps: 40000 # batches
+            warmup_steps: 0 # batches
+            cold_factor: 1.0
+
+    fit_kwargs:
+        batch_size: 100
+        epochs: 300
+        verbose: 0
+        #validation_split: 0.1
+        validation_freq: 20 # epochs
+        shuffle: True
+        initial_epoch: 0
+
+    checkpoint: True
+    checkpoint_kwargs:
+        filename: weights.{epoch:03d}.tf
+        save_freq: 30000 # samples
+        save_weights_only: True
+
+    tensorboard: CustomTensorBoard
+    tensorboard_kwargs:
+        histogram_freq: 100 # epochs
+        metrics_freq: 1 # epochs
+        write_graph: True
+        write_images: True
+        update_freq: epoch
+        profile_batch: 0

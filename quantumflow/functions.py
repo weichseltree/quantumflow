@@ -2,57 +2,6 @@ import quantumflow
 
 import os
 
-def weizsaecker_pseudo_integrand(pseudo, h):
-    return 1/2*tf.square(derivative_five_point(pseudo, h))
-
-
-def weizsaecker_pseudo_functional(pseudo, h):
-    return integrate(weizsaecker_pseudo_integrand(pseudo, h), h)
-
-
-def weizsaecker_pseudo_functional_derivative(pseudo, h):
-    return -laplace_five_point(pseudo, h)
-
-
-def calculate_density_and_energies(potential, wavefunctions, energies, N, h):
-    assert(N <= wavefunctions.shape[2])
-    density = np.sum(np.square(wavefunctions)[:, :, :N], axis=-1)
-
-    kinetic_energy_densities = 0.5*derivative_five_point(wavefunctions, h)**2 # == -0.5*wavefunctions*laplace_five_point(wavefunctions)
-    
-    potential_energy_densities = np.expand_dims(potential, axis=2)*wavefunctions**2
-    
-    potential_energies = np_integrate(potential_energy_densities, h)
-    kinetic_energies = np_integrate(kinetic_energy_densities, h)
-
-    energy = np.sum(energies[:, :N], axis=-1)
-    potential_energy = np.sum(potential_energies[:, :N], axis=-1)
-    kinetic_energy = np.sum(kinetic_energies[:, :N], axis=-1)
-    
-    kinetic_energy_density = np.sum(kinetic_energy_densities[:, :, :N], axis=-1)
-    potential_energy_density = np.sum(potential_energy_densities[:, :, :N], axis=-1)
-
-    return density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density
-
-
-def calculate_system_properties(potential, wavefunctions, energies, N, h):
-    assert(N <= wavefunctions.shape[2])
-
-    density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density = calculate_density_and_energies(potential, wavefunctions, energies, N, h)
-    derivative = np.expand_dims(energy/N, axis=1) - potential
-
-    pseudo = np.sqrt(density)
-    vW_kinetic_energy_density = weizsaecker_pseudo_integrand(pseudo, h).numpy()
-    vW_kinetic_energy = weizsaecker_pseudo_functional(pseudo, h).numpy()
-    vW_pseudo_derivative = weizsaecker_pseudo_functional_derivative(pseudo, h).numpy()
-    
-    vW_derivative = vW_pseudo_derivative[:, 1:-1]/(2*pseudo[:, 1:-1])
-    vW_derivative = np.concatenate([vW_derivative[:, 0:1], vW_derivative, vW_derivative[:, -1:]], axis=1)
-
-    return density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density, derivative, vW_kinetic_energy, vW_kinetic_energy_density, vW_derivative
-
-
-
 def run_experiment(experiment, run_name, data_dir='../data'): 
     base_dir = os.path.join(data_dir, experiment)
     model_dir = os.path.join(base_dir, run_name)

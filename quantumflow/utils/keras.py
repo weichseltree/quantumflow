@@ -1,58 +1,7 @@
 import tensorflow as tf
-
-class KineticEnergyFunctionalDerivativeModel(tf.keras.Model):
-    def __init__(self, params):
-        super().__init__()
-        self.model = params['model_kwargs']['base_model'](params)
-        self.h = tf.constant(params['dataset']['h'], dtype=params['dtype'])
-
-        self.output_names = sorted(['derivative'] + self.model.output_names)
-        self.input_names = self.model.input_names
-
-    @tf.function
-    def call(self, density):
-        density = tf.nest.flatten(density)
-
-        with tf.GradientTape() as tape:
-            tape.watch(density)
-            kinetic_energy = self.model(density)
-
-        derivative = tf.identity(1/self.h*tape.gradient(kinetic_energy, density), name='derivative')
-        return derivative, kinetic_energy
-
-    def fit(self, y=None, validation_data=None, **kwargs):
-        if isinstance(y, dict):
-            y = tf.nest.flatten(y)
-        
-        if isinstance(validation_data, (tuple, list)) and isinstance(validation_data[1], dict):
-            validation_data = (validation_data[0], tf.nest.flatten(validation_data[1]))
-
-        super().fit(y=y, validation_data=validation_data, **kwargs)
-
-    def _set_output_attrs(self, outputs):
-        super()._set_output_attrs(outputs)
-        self.output_names = sorted(['derivative'] + self.model.output_names)
-
-    def summary(self, *args, **kwargs):
-        return self.model.summary(*args, **kwargs)
-
-    def save(self, *args, **kwargs):
-        return self.model.save(*args, **kwargs)
-
-    def save_weights(self, *args, **kwargs):
-        self.model.optimizer = self.optimizer
-        returns = self.model.save_weights(*args, **kwargs)
-        self.model.optimizer = None
-        return returns
-
-    def load_weights(self, *args, **kwargs):
-        self.model.optimizer = self.optimizer
-        returns = self.model.load_weights(*args, **kwargs)
-        self.optimizer = self.model.optimizer
-        self.model.optimizer = None
-        return returns
-
 import time
+
+import quantumflow
 
 class CustomTensorBoard(tf.keras.callbacks.TensorBoard):
     def __init__(self, *args, metrics_freq=0, learning_rate=None, **kwargs):
@@ -129,3 +78,9 @@ class WarmupExponentialDecay(tf.keras.optimizers.schedules.ExponentialDecay):
         config.update({'cold_factor': self.cold_factor})
         config.update({'final_learning_rate': self.final_learning_rate})
         return config
+
+def Adam(learning_rate, **kwargs):
+    if not isinstance(learning_rate, float):
+        learning_rate = quantumflow.instantiate(learning_rate)
+
+    return tf.keras.optimizers.Adam(learning_rate=learning_rate, **kwargs)

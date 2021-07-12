@@ -1,5 +1,5 @@
 from quantumflow import utils
-
+from quantumflow.dataset import QFDataset
 
 def instantiate(params, *args, **kwargs):
     class_ = get_class(params['class'])

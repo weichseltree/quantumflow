@@ -11,6 +11,8 @@ class CustomTensorBoard(tf.keras.callbacks.TensorBoard):
         self.learning_rate = learning_rate
         self.metrics_freq = metrics_freq
 
+
+'''
     def on_epoch_end(self, epoch, logs=None):
         """Runs metrics and histogram summaries at epoch end."""
         if self.metrics_freq and epoch % self.metrics_freq == 0 or any(['val_' in key for key in logs.keys()]):
@@ -53,7 +55,7 @@ class CustomTensorBoard(tf.keras.callbacks.TensorBoard):
 
         logs = {rename_key(key): value for key, value in logs.items()}
         super()._log_metrics(logs, '', step)
-
+'''
 
 class WarmupExponentialDecay(tf.keras.optimizers.schedules.ExponentialDecay):
     def __init__(self, warmup_steps=None, cold_steps=None, cold_factor=0.1, final_learning_rate=0.0, **kwargs):

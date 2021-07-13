@@ -80,7 +80,7 @@ class DensityKineticEnergyDataset(quantumflow.QFDataset):
         potential = dataset.potential
         wavefunctions = dataset.wavefunctions
         energies = dataset.energies
-        x = dataset.h
+        x = dataset.x
         h = dataset.h
 
         del dataset
@@ -138,3 +138,49 @@ class DensityKineticEnergyDataset(quantumflow.QFDataset):
 
         for target in self.targets_names:
             add_by_name(self.targets, target)
+
+    def visualize(self, preview=5, figsize=(20, 3), dpi=None):
+        import matplotlib.pyplot as plt
+
+        plt.figure(figsize=figsize, dpi=dpi)
+        plt.plot(self.x, np.transpose(self.density)[:, :preview]) # only plot first potentials
+        plt.title("Input Density")
+        plt.xlabel("x / bohr")
+        plt.ylabel("Energy / hartree")
+        plt.grid(which='major', axis='y', linestyle='--')
+        plt.show()
+
+        #----------------------------
+       
+        plt.figure(figsize=figsize, dpi=dpi)
+        plt.plot(self.x, np.transpose(self.kinetic_energy_density)[:, :preview]) # only plot first potentials
+        plt.title("Output Kinetic Energy Density")
+        plt.xlabel("x / bohr")
+        plt.ylabel("Energy / hartree")
+        plt.grid(which='major', axis='y', linestyle='--')
+        plt.show()
+
+        
+        #----------------------------
+       
+        plt.figure(figsize=figsize, dpi=dpi)
+        plt.plot(self.x, np.transpose(self.derivative)[:, :preview]) # only plot first potentials
+        plt.title("Output Kinetic Energy Functional Derivative")
+        plt.xlabel("x / bohr")
+        plt.ylabel("Energy / hartree")
+        plt.grid(which='major', axis='y', linestyle='--')
+        plt.show()
+
+        import pandas as pd
+        from IPython.display import display
+
+        df = pd.DataFrame(data={
+            'energy': self.energy, 
+            'potential_energy': self.potential_energy,
+            'kinetic_energy': self.kinetic_energy,
+            'vW_kinetic_energy': self.kinetic_energy,
+            f'diff ({self.dtype})': self.energy - self.potential_energy - self.kinetic_energy
+            })
+
+        display(df)
+

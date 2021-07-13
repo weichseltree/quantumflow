@@ -12,10 +12,10 @@ def generate_potentials(return_x=False,
                         discretisation_points=500, 
                         n_gauss=3, 
                         interval_length=1.0,
-                        a_minmax=(0.0, 3*10.0), 
+                        a_minmax=(0.0, 10.0), 
                         b_minmax=(0.4, 0.6), 
                         c_minmax=(0.03, 0.1), 
-                        n_method='sum',
+                        n_method='mean',
                         dtype='float64',
                         **kwargs):
     
@@ -163,6 +163,7 @@ class Non1D_QFDataset(quantumflow.QFDataset):
             
             print(f"dataset {self.filename} saved to {self.run_dir}")
         else:
+            print(f"Loading built dataset from {os.path.join(self.run_dir, self.filename)}")
             self.x, self.h, self.potential, self.wavefunctions, self.energies = load_dataset(self.run_dir, self.filename)
 
     def visualize(self, preview=5, figsize=(20, 3), dpi=None):

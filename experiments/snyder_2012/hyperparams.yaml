@@ -1,20 +1,53 @@
-train_dataset:
-  class: quantumflow.noninteracting_1d.generate_dataset
-  filename: 'test'
-  format: hdf5
-  seed: 0
-  dataset_size: 100
-  batch_size: 100
+recreate_dataset: &recreate_dataset
+  class: quantumflow.noninteracting_1d.Non1D_QFDataset
+  filename: 'dataset.hdf5'
 
-  discretisation_points: 500
-  n_gauss: 3
-  interval_length: 1.0
-  a_minmax: [0.0, 30.0]
-  b_minmax: [0.4, 0.6]
-  c_minmax: [0.03, 0.1]
-  n_method: 'sum'
-  dtype: 'float64'
+  potentials: &recreate_dataset-potentials
+    class: quantumflow.noninteracting_1d.TXTPotentialDataset
+    filename: '../paper_potentials.txt'
+    discretisation_points: 500
+    interval_length: 1.0
+    
+  seed: 0
   N: 4
+  dtype: 'float64'
+  dataset_size: 100
+  generate_batch_size: 10000
+  numerov_init_slope: 5.0
+  
+
+recreate_sample:
+  <<: *recreate_dataset
+  potentials:
+    <<: *recreate_dataset-potentials
+    filename: '../paper_sample_potential.txt'
+  dataset_size: 1
+  
+
+train_dataset: &train_dataset
+  class: quantumflow.noninteracting_1d.Non1D_QFDataset
+  filename: 'dataset.hdf5'
+
+  potentials: &train_dataset-potentials
+    class: quantumflow.noninteracting_1d.PotentialDataset
+    discretisation_points: 500
+    interval_length: 1.0
+    n_gauss: 3
+    a_minmax: [0.0, 10.0]
+    b_minmax: [0.4, 0.6]
+    c_minmax: [0.03, 0.1]
+    n_method: 'sum'
+    
+  seed: 0
+  N: 4
+  dtype: 'float64'
+  dataset_size: 100000
+  generate_batch_size: 10000
   numerov_init_slope: 5.0
 
+
+validate_dataset: 
+  <<: *train_dataset
+  seed: -1
+  dataset_size: 1000
 

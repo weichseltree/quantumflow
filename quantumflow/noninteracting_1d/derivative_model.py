@@ -2,6 +2,7 @@ import tensorflow as tf
 
 import quantumflow
 
+
 class KineticEnergyFunctionalDerivativeModel(tf.keras.Model):
     def __init__(self, base_model, dataset, run_dir):
         super().__init__()
@@ -27,20 +28,20 @@ class KineticEnergyFunctionalDerivativeModel(tf.keras.Model):
         self.output_names = sorted(['derivative'] + self.base_model.output_names)
 
     def summary(self, *args, **kwargs):
-        return self.model.summary(*args, **kwargs)
+        return self.base_model.summary(*args, **kwargs)
 
     def save(self, *args, **kwargs):
-        return self.model.save(*args, **kwargs)
+        return self.base_model.save(*args, **kwargs)
 
     def save_weights(self, *args, **kwargs):
-        self.model.optimizer = self.optimizer
-        returns = self.model.save_weights(*args, **kwargs)
-        self.model.optimizer = None
+        self.base_model.optimizer = self.optimizer
+        returns = self.base_model.save_weights(*args, **kwargs)
+        self.base_model.optimizer = None
         return returns
 
     def load_weights(self, *args, **kwargs):
-        self.model.optimizer = self.optimizer
-        returns = self.model.load_weights(*args, **kwargs)
-        self.optimizer = self.model.optimizer
-        self.model.optimizer = None
+        self.base_model.optimizer = self.optimizer
+        returns = self.base_model.load_weights(*args, **kwargs)
+        self.optimizer = self.base_model.optimizer
+        self.base_model.optimizer = None
         return returns

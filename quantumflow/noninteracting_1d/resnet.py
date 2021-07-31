@@ -94,14 +94,13 @@ def FixupResNet_KineticEnergyDensityFunctional(run_dir, dataset, blocks, final_l
     kernel_regularizer = tf.keras.regularizers.l2(l2_regularisation) if l2_regularisation > 0.0 else None
 
     density = tf.keras.layers.Input(shape=dataset.density.shape[1:], name='density')
-    value = tf.keras.layers.Lambda(lambda x: tf.expand_dims(tf.pad(x, [(0, 0), (450, 450)]), axis=-1))(density)
+    value = tf.keras.layers.Lambda(lambda x: tf.expand_dims(x, axis=-1))(density)
     
     fixup_L = len(blocks)    
     fixup_scale_variance = fixup_L**(-1 / (fixup_m - 1))
         
     def fixup_bottleneck_block(input, filters, kernel_size, padding=None, activation=None, add_input=True):
         value = input
-        input = tf.keras.layers.Lambda(lambda x: x[:, 50:-50, :])(input)
         value = BiasLayer()(value)
         
         for layer in range(len(filters)):

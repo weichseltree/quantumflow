@@ -87,10 +87,12 @@ class DensityKineticEnergyDataset(quantumflow.QFDataset):
 
         if self.N == 'all':
             all_data = [calculate_system_properties(potential, wavefunctions, energies, self.N, h) for N in range(1, wavefunctions.shape[2]+1)]
-            density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density, derivative, vW_kinetic_energy, vW_kinetic_energy_density, vW_derivative = \
+            density, energy, potential_energy, kinetic_energy, potential_energy_density, \
+            kinetic_energy_density, derivative, vW_kinetic_energy, vW_kinetic_energy_density, vW_derivative = \
                 [np.concatenate([all_data[i][j] for i in range(len(all_data))], axis=0) for j in range(len(all_data[0]))]
         else:
-            density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density, derivative, vW_kinetic_energy, vW_kinetic_energy_density, vW_derivative = \
+            density, energy, potential_energy, kinetic_energy, potential_energy_density, \
+            kinetic_energy_density, derivative, vW_kinetic_energy, vW_kinetic_energy_density, vW_derivative = \
                 calculate_system_properties(potential, wavefunctions, energies, self.N, h)
             
         self.dataset_size, self.discretisation_points = density.shape

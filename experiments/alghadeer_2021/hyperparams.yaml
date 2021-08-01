@@ -1,52 +1,62 @@
--resnet_default_block: &resnet_default_block
-  filters: [32, 32]
-  kernel_size: [100, 100]
-  padding: same
-  activation: softplus
-  add_input: True
+datasets/3GD: &3GD_dataset
+  class: quantumflow.noninteracting_1d.Non1D_QFDataset
+  filename: 'dataset.hdf5'
 
--resnet_final_block: &resnet_final_block
-  filters: [1]
-  kernel_size: [100]
-  padding: same
-  activation: null
-  add_input: False
+  potentials: &3GD_dataset-potentials
+    class: quantumflow.noninteracting_1d.PotentialDataset
+    discretisation_points: 500
+    interval_length: 1.0
+    n_gauss: 3
+    a_minmax: [0.0, 10.0]
+    b_minmax: [0.4, 0.6]
+    c_minmax: [0.03, 0.1]
+    n_method: 'sum'
+    
+  seed: -1
+  N: 5
+  dtype: 'float64'
+  dataset_size: 1000
+  generate_batch_size: 10000
+  numerov_init_slope: 5.0
 
 
-resnet_100: &resnet_100
+datasets/PiB: 
+  <<: *3GD_dataset
+  seed: 0
+  dataset_size: 1000
+  potentials: 
+    <<: *3GD_dataset-potentials
+    a_minmax: [0.0, 0.0]
+    # TODO: variate L !
+
+
+recreate: &recreate
   seed: 0
 
-  dataset_train: &resnet_100-dataset_train
+  dataset_train: &recreate-dataset_train
     class: quantumflow.noninteracting_1d.DensityKineticEnergyDataset
-    experiment: snyder_2012
-    run_name: recreate_dataset
-    N: 2
-    dtype: float32
-    subtract_von_weizsaecker: True
+    experiment: alghadeer_2021
+    run_name: datasets/3GD
+    N: 'all'
+    dtype: float64
+    subtract_von_weizsaecker: False
 
     features: 
       - density
 
     targets: 
       - kinetic_energy
-      - kinetic_energy_density
-      - derivative
 
   dataset_validate:
-    <<: *resnet_100-dataset_train
-    run_name: validate_dataset
+    <<: *recreate-dataset_train
+    run_name: datasets/3GD
 
-  model: &resnet_100-model
+  model: &recreate-model
     class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
-    base_model: &resnet_100-model-base_model
+    base_model: &recreate-model-base_model
       class: quantumflow.noninteracting_1d.ResNet_KineticEnergyDensityFunctional
       l2_regularisation: 0.00025
 
-      blocks: 
-        - <<: *resnet_default_block
-        - <<: *resnet_default_block
-        - <<: *resnet_default_block
-        - <<: *resnet_final_block
 
   metrics: 
     kinetic_energy: mean_absolute_error
@@ -109,40 +119,3 @@ resnet_100: &resnet_100
   save_model: False
   export: True
   export_model: base_model
-
-
--fixup_bottleneck_block: &fixup_bottleneck_block
-  filters: [8, 8, 32]
-  kernel_size: [1, 101, 1]
-  padding: same
-  activation: softplus
-  add_input: True
-  
-
-fixup_100:
-  <<: *resnet_100
-  
-  model:
-    <<: *resnet_100-model
-    base_model:
-      <<: *resnet_100-model-base_model
-      class: quantumflow.noninteracting_1d.FixupResNet_KineticEnergyDensityFunctional
-      l2_regularisation: 0.00025
-      fixup_m: 3
-      
-      blocks: 
-        - <<: *fixup_bottleneck_block
-        - <<: *fixup_bottleneck_block
-        - <<: *fixup_bottleneck_block
-        - <<: *fixup_bottleneck_block
-        - <<: *fixup_bottleneck_block
-        - <<: *fixup_bottleneck_block
-        - <<: *fixup_bottleneck_block
-        - <<: *fixup_bottleneck_block
-        
-      final_layer:
-        filters: 1
-        kernel_size: 101
-        padding: same
-        activation: null
-        use_bias: True

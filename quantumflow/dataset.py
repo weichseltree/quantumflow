@@ -7,7 +7,7 @@ class QFDataset():
     def __init__(self, run_dir, **kwargs):
         self.run_dir = run_dir
 
-    def build(self):
+    def build(self, force=False):
         pass
 
     def visualize(self):

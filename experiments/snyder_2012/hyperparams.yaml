@@ -15,7 +15,7 @@ recreate_dataset: &recreate_dataset
   generate_batch_size: 10000
   numerov_init_slope: 5.0
   
-
+  
 recreate_sample:
   <<: *recreate_dataset
   potentials:

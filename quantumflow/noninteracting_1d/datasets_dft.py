@@ -68,12 +68,12 @@ class DensityKineticEnergyDataset(quantumflow.QFDataset):
         self.targets_names = targets
         self.subtract_von_weizsaecker = subtract_von_weizsaecker
 
-    def build(self):
+    def build(self, force=False):
 
         dataset_base_dir = os.path.abspath(os.path.join(self.run_dir, '../..', self.experiment))
         dataset_params = quantumflow.utils.load_yaml(os.path.join(dataset_base_dir, 'hyperparams.yaml'))[self.run_name]
         dataset_run_dir = os.path.join(dataset_base_dir, self.run_name)
-
+        
         dataset = quantumflow.instantiate(dataset_params, run_dir=dataset_run_dir)
         dataset.build()
 
@@ -86,7 +86,7 @@ class DensityKineticEnergyDataset(quantumflow.QFDataset):
         del dataset
 
         if self.N == 'all':
-            all_data = [calculate_system_properties(potential, wavefunctions, energies, self.N, h) for N in range(1, wavefunctions.shape[2]+1)]
+            all_data = [calculate_system_properties(potential, wavefunctions, energies, N, h) for N in range(1, wavefunctions.shape[2]+1)]
             density, energy, potential_energy, kinetic_energy, potential_energy_density, \
             kinetic_energy_density, derivative, vW_kinetic_energy, vW_kinetic_energy_density, vW_derivative = \
                 [np.concatenate([all_data[i][j] for i in range(len(all_data))], axis=0) for j in range(len(all_data[0]))]

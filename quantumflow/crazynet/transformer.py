@@ -6,12 +6,12 @@ import numpy as np
 
 def get_xdiff(x1, x2):
     xdiff = tf.expand_dims(x1, axis=-2) - tf.expand_dims(x2, axis=-3)
-    return tf.reduce_sum(tf.square(xdiff), axis=-1)
+    return tf.sqrt(tf.reduce_sum(tf.square(xdiff), axis=-1)) # (..., seq_len, seq_len)
 
 def point_wise_feed_forward_network(d_model, dff):
     return tf.keras.Sequential([
-        tf.keras.layers.Dense(dff, activation='relu'),  # (batch_size, seq_len, dff)
-        tf.keras.layers.Dense(d_model)  # (batch_size, seq_len, d_model)
+        tf.keras.layers.Dense(dff, activation='relu'),  # (..., seq_len, dff)
+        tf.keras.layers.Dense(d_model)  # (..., seq_len, d_model)
     ])
 
 def metric_scaled_dot_product_attention(q, k, v, alpha, beta, xdiff, mask=None):
@@ -74,41 +74,43 @@ class MetricMultiHeadAttention(tf.keras.layers.Layer):
         self.wq = tf.keras.layers.Dense(d_model)
         self.wk = tf.keras.layers.Dense(d_model)
         self.wv = tf.keras.layers.Dense(d_model)
-        self.wa = tf.keras.layers.Dense(self.num_heads, kernel_initializer='zeros')
-        self.wb = tf.keras.layers.Dense(self.num_heads, kernel_initializer='zeros')
+        self.wa = tf.keras.layers.Dense(self.num_heads)#, kernel_initializer='zeros')
+        self.wb = tf.keras.layers.Dense(self.num_heads)#, kernel_initializer='zeros')
 
         self.dense = tf.keras.layers.Dense(d_model)
 
-    def split_heads(self, x, batch_size):
+    def split_heads(self, x, batch_sizes):
         """Split the last dimension into (num_heads, depth).
-        Transpose the result such that the shape is (batch_size, num_heads, size_x, depth)
+        Transpose the result such that the shape is (..., num_heads, size_x, depth)
         """
-        x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
-        return tf.transpose(x, perm=[0, 2, 1, 3])
+        x = tf.reshape(x, batch_sizes + [-1, self.num_heads, self.depth])
+        return tf.transpose(x, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes), len(batch_sizes)+2])
 
     def call(self, v, k, q, xdiff, mask=None):
-        batch_size = tf.shape(q)[0]
+        batch_sizes = tf.unstack(tf.shape(q)[:-2])
 
-        q = self.wq(q)  # (batch_size, size_q, d_model)
-        k = self.wk(k)  # (batch_size, size_k, d_model)
-        v = self.wv(v)  # (batch_size, size_v, d_model)
-        a = self.wa(q)  # (batch_size, size_q, num_heads)
-        b = self.wb(q)  # (batch_size, size_q, num_heads)
+        q = self.wq(q)  # (..., size_q, d_model)
+        k = self.wk(k)  # (..., size_k, d_model)
+        v = self.wv(v)  # (..., size_v, d_model)
+        a = self.wa(q)  # (..., size_q, num_heads)
+        b = self.wb(q)  # (..., size_q, num_heads)
 
-        q = self.split_heads(q, batch_size)  # (batch_size, num_heads, size_q, depth)
-        k = self.split_heads(k, batch_size)  # (batch_size, num_heads, size_k, depth)
-        v = self.split_heads(v, batch_size)  # (batch_size, num_heads, size_v, depth)
-        a = tf.transpose(a, perm=[0, 2, 1])  # (batch_size, num_heads, size_q)
-        b = tf.transpose(b, perm=[0, 2, 1])  # (batch_size, num_heads, size_q)
-        xdiff = tf.expand_dims(xdiff, axis=1) # (batch_size, num_heads, size_q, size_q)
+        q = self.split_heads(q, batch_sizes)  # (..., num_heads, size_q, depth)
+        k = self.split_heads(k, batch_sizes)  # (..., num_heads, size_k, depth)
+        v = self.split_heads(v, batch_sizes)  # (..., num_heads, size_v, depth)
+        
+        a = tf.transpose(a, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes)])  # (..., num_heads, size_q)
+        b = tf.transpose(b, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes)])  # (..., num_heads, size_q)
+        
+        xdiff = tf.expand_dims(xdiff, axis=-3) # (..., num_heads, size_q, size_k)
         
         # scaled_attention.shape == (batch_size, num_heads, size_q, depth)
         # attention_weights.shape == (batch_size, num_heads, size_q, size_k)
         scaled_attention, attention_weights = metric_scaled_dot_product_attention(q, k, v, a, b, xdiff, mask=mask)
 
-        scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])  # (batch_size, size_q, num_heads, depth)
+        scaled_attention = tf.transpose(scaled_attention, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes), len(batch_sizes)+2])  # (batch_size, size_q, num_heads, depth)
 
-        concat_attention = tf.reshape(scaled_attention, (batch_size, -1, self.d_model))  # (batch_size, size_q, d_model)
+        concat_attention = tf.reshape(scaled_attention, batch_sizes + [-1, self.d_model])  # (batch_size, size_q, d_model)
 
         output = self.dense(concat_attention)  # (batch_size, size_q, d_model)
 
@@ -130,13 +132,13 @@ class MetricEncoderLayer(tf.keras.layers.Layer):
 
     def call(self, inputs, xdiff, training=False, mask=None):
 
-        attn_output, _ = self.mha(inputs, inputs, inputs, xdiff, mask=mask)  # (batch_size, input_size, d_model)
+        attn_output, _ = self.mha(inputs, inputs, inputs, xdiff, mask=mask)  # (..., input_size, d_model)
         attn_output = self.dropout1(attn_output, training=training)
-        out1 = self.layernorm1(inputs + attn_output)  # (batch_size, input_size, d_model)
+        out1 = self.layernorm1(inputs + attn_output)  # (..., input_size, d_model)
 
-        ffn_output = self.ffn(out1)  # (batch_size, input_size, d_model)
+        ffn_output = self.ffn(out1)  # (..., input_size, d_model)
         ffn_output = self.dropout2(ffn_output, training=training)
-        out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_size, d_model)
+        out2 = self.layernorm2(out1 + ffn_output)  # (..., input_size, d_model)
 
         return out2
 
@@ -152,31 +154,35 @@ class CrazyNet(tf.keras.layers.Layer):
         self.scale = scale
 
         self.input_layer = tf.keras.layers.Dense(d_model, activation='relu')
-        self.x_token = self.add_weight(name='x_token', shape=(d_model,), dtype=tf.float32, trainable=True)
+        self.x_token = self.add_weight(name='x_token', shape=(d_model,), dtype=tf.float32, trainable=True) # (d_model)
     
         self.enc_layers = [MetricEncoderLayer(d_model, num_heads, dff, dropout_rate) for _ in range(num_layers)]
 
         self.pre_final_layers = [tf.keras.layers.Dense(dff, activation='relu') for dff in dff_final]
-        self.final_layer = tf.keras.layers.Dense(num_outputs, kernel_initializer='zeros')
+        self.final_layer = tf.keras.layers.Dense(num_outputs)#, kernel_initializer='zeros')
     
     
-    def call(self, x, inputs_x, inputs, training=False, mask=None):
-        all_x = tf.concat([tf.expand_dims(x, axis=1), inputs_x], axis=1) # (batch_size, input_size+1, num_dims)
-        xdiff = get_xdiff(all_x, all_x)/self.scale # (batch_size, input_size+1, input_size+1)
+    def call(self, x, x_inputs, inputs, training=False, mask=None):
+        x_all = tf.concat([tf.expand_dims(x, axis=-2), x_inputs], axis=-2) # (..., input_size+1, num_dims)
+        xdiff = get_xdiff(x_all, x_all)/self.scale # (..., input_size+1, input_size+1)
         
-        x_token = tf.expand_dims(tf.repeat(tf.expand_dims(self.x_token, axis=0), tf.shape(x)[0], axis=0), axis=1)        
-        value = all_inputs = tf.concat([x_token, self.input_layer(inputs)], axis=1)
+        x_token = self.x_token # (d_model)
+        for shape in tf.unstack(tf.shape(x))[:-1]:
+            x_token = tf.repeat(tf.expand_dims(x_token, axis=-2), shape, axis=-2)
+        x_token = tf.expand_dims(x_token, axis=-2) # (..., 1, d_model)
+        
+        value = all_inputs = tf.concat([x_token, self.input_layer(inputs)], axis=-2)
         
         for i in range(self.num_layers):
             value = self.enc_layers[i](value, xdiff, training=training, mask=mask)
             
-        value = value[:, 0]
+        value = value[..., 0]
         
         for layer in self.pre_final_layers:
             value = layer(value)
         
         outputs = self.final_layer(value)
         
-        return outputs # (batch_size, num_outputs)
+        return outputs # (..., num_outputs)
     
     

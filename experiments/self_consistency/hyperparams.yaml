@@ -1,0 +1,359 @@
+default: &DEFAULT
+    model: null
+    model_dtype: float32
+
+    dataset: datasets/dataset_test.hdf5
+    train_dataset: datasets/dataset_paper.hdf5
+    batch_size: 100
+
+    N: 1
+    dtype: float64
+    model_subtract_von_weizsaecker: False
+    model_pseudo_wavefunction: False
+
+    initial_density: mean # mean, zeroV
+
+    iterations: 10000
+    step_size:  0.0001
+    pseudo_wavefunction: False
+    project_functional_derivative: null
+    project: null
+
+    record_filename: 'recordings.hdf5'
+    record_M: 1 # per batch
+    record: 
+        value: 100
+        model_derivative: 100
+        vW_derivative: 100
+        functional_derivative: 100
+
+pca: &PCA
+    pseudo_wavefunction: False
+    project_functional_derivative: 'pca'
+    project: null
+    pca_kwargs: 
+        m: 30
+        l: 5
+
+    iterations: 1000
+    step_size:  0.001
+    record: 
+        value: 10
+        model_derivative: 10
+        vW_derivative: 10
+        functional_derivative: 10
+
+######################
+
+pure_vW:
+    <<: *DEFAULT
+    model_subtract_von_weizsaecker: True
+    model_von_weizsaecker_factor: 1
+    pseudo_wavefunction: True
+    model_pseudo_wavefunction: False
+    project: 'sines'
+    sines_n: 40
+
+krr:
+    <<: [*PCA, *DEFAULT]
+    model: ke_krr/default/saved_model
+    model_dtype: float64
+
+cnn:
+    <<: [*PCA, *DEFAULT]
+    model: kd_cnn/cnn/seed0/saved_model
+
+models_cnn:
+    <<: [*PCA, *DEFAULT]
+    model: models/cnn/saved_model
+
+resnet:
+    <<: [*PCA, *DEFAULT]
+    model: kd_cnn/resnet/seed0/saved_model
+
+models_resnet:
+    <<: [*PCA, *DEFAULT]
+    model: models/resnet/saved_model
+
+models_resnet_7:
+    <<: [*PCA, *DEFAULT]
+    model: models/resnet/saved_model
+    pca_kwargs: 
+        m: 30
+        l: 7
+
+models_resnet_10:
+    <<: [*PCA, *DEFAULT]
+    model: models/resnet/saved_model
+    pca_kwargs: 
+        m: 30
+        l: 10
+#########################
+# Models trained on all N with vW
+
+
+cnn_all:
+    <<: *DEFAULT
+    model: kd_resnet_all/cnn_vWall_3/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    N: 4
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 10
+
+krr_vW_all_1:
+    <<: *DEFAULT
+    model: ke_krr/vW_allN/saved_model
+    model_dtype: float64
+    model_subtract_von_weizsaecker: True
+    N: 1
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 5
+
+
+krr_vW_all_2:
+    <<: *DEFAULT
+    model: ke_krr/vW_allN/saved_model
+    model_dtype: float64
+    model_subtract_von_weizsaecker: True
+    N: 2
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 5
+
+
+krr_vW_all_3:
+    <<: *DEFAULT
+    model: ke_krr/vW_allN/saved_model
+    model_dtype: float64
+    model_subtract_von_weizsaecker: True
+    N: 3
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 5
+
+
+krr_vW_all_4:
+    <<: *DEFAULT
+    model: ke_krr/vW_allN/saved_model
+    model_dtype: float64
+    model_subtract_von_weizsaecker: True
+    N: 4
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 7
+
+resnet_vW_all_1:
+    <<: *DEFAULT
+    model: kd_resnet_vW/resnet_vW_all/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    N: 1
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40
+
+resnet_vW_all_2:
+    <<: *DEFAULT
+    model: kd_resnet_vW/resnet_vW_all/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    N: 2
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40
+
+resnet_vW_all_3:
+    <<: *DEFAULT
+    model: kd_resnet_vW/resnet_vW_all/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    N: 3 
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40
+
+resnet_vW_all_4:
+    <<: *DEFAULT
+    model: kd_resnet_vW/resnet_vW_all/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    N: 4
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 20
+
+#############################
+# Models trained on a specific N with vW 
+
+
+resnet_vW_2:
+    <<: *DEFAULT
+    model: kd_resnet_vW/resnet_vW_N2/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 2
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40
+
+
+models_resnet_vW_N2:
+    <<: *DEFAULT
+    model: models/resnet_vW_N2/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 2
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40
+
+resnet_vW_3:
+    <<: *DEFAULT
+    model: kd_resnet_vW/resnet_vW_N3/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 3
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40
+
+resnet_vW_4:
+    <<: *DEFAULT
+    model: kd_resnet_vW/resnet_vW_N4/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 4
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40
+
+krr_vW_2:
+    <<: *DEFAULT
+    model: ke_krr/vW_2/saved_model
+    model_dtype: float64
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 2
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 5
+
+krr_vW_3:
+    <<: *DEFAULT
+    model: ke_krr/vW_3/saved_model
+    model_dtype: float64
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 3
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 6
+
+krr_vW_4:
+    <<: *DEFAULT
+    model: ke_krr/vW_4/saved_model
+    model_dtype: float64
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 4
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 4
+
+resnet_large_longer:
+    <<: *DEFAULT
+    model: ke_resnet_large/resnet_large_longer/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 2
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40
+
+    iterations: 1000
+    step_size:  0.0001
+
+    record_filename: 'recordings.hdf5'
+    record_M: 1 # per batch
+    record: 
+        value: 10
+        model_derivative: 10
+        vW_derivative: 10
+        functional_derivative: 10
+
+
+resnet_large_longer_lessl2:
+    <<: *DEFAULT
+    model: ke_resnet_large/resnet_large_longer_lessl2/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 2
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40
+
+resnet_llll_3:
+    <<: *DEFAULT
+    model: ke_resnet_large/resnet_llll_3/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 3
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40
+
+resnet_llll_4:
+    <<: *DEFAULT
+    model: ke_resnet_large/resnet_llll_4/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 4
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40
+
+
+models_resnet_vW_N2_10000:
+    <<: *DEFAULT
+    model: models/models_large/resnet_vW_N2_10000/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 2
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40
+
+models_resnet_vW_N2_50000:
+    <<: *DEFAULT
+    model: models/models_large/resnet_vW_N2_50000/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 2
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40
+
+
+models_resnet_vW_N2_100000:
+    <<: *DEFAULT
+    model: models/models_large/resnet_vW_N2_100000/saved_model
+    model_dtype: float32
+    model_subtract_von_weizsaecker: True
+    model_pseudo_wavefunction: False
+    N: 2
+    pseudo_wavefunction: True
+    project: 'sines'
+    sines_n: 40

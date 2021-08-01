@@ -116,8 +116,8 @@ class Non1D_QFDataset(quantumflow.QFDataset):
         self.potential_generator = quantumflow.instantiate(potentials, dataset_size=self.dataset_size, dtype=self.dtype, **kwargs)
     
         
-    def build(self):
-        if not os.path.isfile(os.path.join(self.run_dir, self.filename)):
+    def build(self, force=False):
+        if force or not os.path.isfile(os.path.join(self.run_dir, self.filename)):
 
             tf.keras.backend.clear_session()
             tf.random.set_seed(self.seed)

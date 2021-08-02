@@ -44,7 +44,7 @@ def metric_scaled_dot_product_attention(q, k, v, alpha, beta, xdiff, mask=None):
     # add the mask to the scaled tensor.
     if mask is not None:
         scaled_attention_logits += (mask * -1e9)
-       
+        
     # v1
     metric_attention_logits = tf.expand_dims(alpha, axis=-1)*xdiff + tf.expand_dims(beta, axis=-1) * xdiff**2
     
@@ -94,7 +94,8 @@ class MetricMultiHeadAttention(tf.keras.layers.Layer):
         v = self.wv(v)  # (..., size_v, d_model)
         a = self.wa(q)  # (..., size_q, num_heads)
         b = self.wb(q)  # (..., size_q, num_heads)
-
+        
+        
         q = self.split_heads(q, batch_sizes)  # (..., num_heads, size_q, depth)
         k = self.split_heads(k, batch_sizes)  # (..., num_heads, size_k, depth)
         v = self.split_heads(v, batch_sizes)  # (..., num_heads, size_v, depth)
@@ -133,6 +134,7 @@ class MetricEncoderLayer(tf.keras.layers.Layer):
     def call(self, inputs, xdiff, training=False, mask=None):
 
         attn_output, _ = self.mha(inputs, inputs, inputs, xdiff, mask=mask)  # (..., input_size, d_model)
+        
         attn_output = self.dropout1(attn_output, training=training)
         out1 = self.layernorm1(inputs + attn_output)  # (..., input_size, d_model)
 
@@ -175,7 +177,7 @@ class CrazyNet(tf.keras.layers.Layer):
         
         for i in range(self.num_layers):
             value = self.enc_layers[i](value, xdiff, training=training, mask=mask)
-            
+
         value = value[..., 0]
         
         for layer in self.pre_final_layers:

@@ -159,6 +159,7 @@ class Non1D_QFDataset(quantumflow.QFDataset):
             self.energies = np.concatenate(energies_batches, axis=0)
             self.wavefunctions = np.concatenate(wavefunctions_batches, axis=0)
 
+            if not os.path.exists(self.run_dir): os.makedirs(self.run_dir)
             save_dataset(self.run_dir, self.filename, self.x, self.h, self.potential, self.wavefunctions, self.energies)
             
             print(f"dataset {self.filename} saved to {self.run_dir}")

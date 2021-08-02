@@ -1,0 +1,95 @@
+default: &default
+  seed: 0
+
+  dataset_train: &default-dataset_train
+    class: quantumflow.noninteracting_1d.DensityKineticEnergyDataset
+    experiment: snyder_2012
+    run_name: recreate_dataset
+    N: 2
+    dtype: float32
+    subtract_von_weizsaecker: True
+
+    features: 
+      - density
+
+    targets: 
+      - kinetic_energy
+      - kinetic_energy_density
+      - derivative
+
+  dataset_validate:
+    <<: *default-dataset_train
+    run_name: validate_dataset
+
+  model: &default-model
+    class: quantumflow.crazynet.CrazyNet_KineticEnergyDensityFunctional
+    num_layers: 8
+    d_model: 64
+    dff: 128
+    dff_final: [128, 64]
+    num_heads: 8
+    dropout_rate: 0.0
+    scale: 1.0
+
+
+  metrics: 
+    kinetic_energy: mean_absolute_error
+    kinetic_energy_density: mean_absolute_error
+    derivative: mean_absolute_error
+
+  loss: 
+    kinetic_energy: mean_squared_error
+    kinetic_energy_density: mean_squared_error
+    derivative: mean_squared_error
+
+  loss_weights:
+    kinetic_energy: 0
+    kinetic_energy_density: 1.0
+    derivative: 1.0
+
+  optimizer: &default-optimizer
+    class: quantumflow.utils.Adam
+    beta_1: 0.9
+    beta_2: 0.999
+    epsilon: 1e-07
+    amsgrad: False
+
+    clipnorm: 100.0
+
+    learning_rate: &default-optimizer-learning_rate
+      class: quantumflow.utils.WarmupExponentialDecay
+      initial_learning_rate: 0.0001
+      final_learning_rate: 0.0000000001
+      decay_rate: 0.9
+      decay_steps: 1000 # batches
+
+      cold_steps: 21800 # batches
+      warmup_steps: 0 # batches
+      cold_factor: 1.0
+
+  fit: &default-fit
+    batch_size: 100
+    epochs: 100000
+    verbose: 0
+    #validation_split: 0.1
+    validation_freq: 10000  # epochs
+    shuffle: True
+    initial_epoch: 0
+
+  checkpoint: &default-checkpoint
+    filename: weights.{epoch:03d}.tf
+    save_freq: 2000000 # samples
+    save_weights_only: True
+
+  tensorboard: &default-tensorboard
+    class: quantumflow.utils.CustomTensorBoard
+    histogram_freq: 10000 # epochs
+    metrics_freq: 100 # epochs
+    write_graph: True
+    write_images: True
+    update_freq: epoch
+    profile_batch: [10, 20]
+
+  save_model: False
+  export: True
+  export_model: base_model

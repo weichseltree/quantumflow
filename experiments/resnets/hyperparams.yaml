@@ -94,7 +94,7 @@ resnet_100: &resnet_100
 
   checkpoint: &resnet_100-checkpoint
     filename: weights.{epoch:03d}.tf
-    save_freq: 2000000 # samples
+    save_freq: 20000 # batches
     save_weights_only: True
 
   tensorboard: &resnet_100-tensorboard
@@ -106,13 +106,37 @@ resnet_100: &resnet_100
     update_freq: epoch
     profile_batch: [10, 20]
 
-  save_model: False
-  export: True
-  export_model: base_model
+  save: True
+  save_model: base_model
 
-resnet_100_colab:
+
+resnet_100_no_deriv:
   <<: *resnet_100
+  dataset_train: &resnet_100_no_deriv-dataset_train
+    <<: *resnet_100-dataset_train
+    targets: 
+      - kinetic_energy
+      - kinetic_energy_density
 
+  dataset_validate:
+    <<: *resnet_100_no_deriv-dataset_train
+    run_name: validate_dataset
+
+  model: 
+    <<: *resnet_100-model-base_model
+
+  metrics: 
+    kinetic_energy: mean_absolute_error
+    kinetic_energy_density: mean_absolute_error
+
+  loss: 
+    kinetic_energy: mean_squared_error
+    kinetic_energy_density: mean_squared_error
+
+  loss_weights:
+    kinetic_energy: 0
+    kinetic_energy_density: 1.0
+    
 
 resnet_100000:
   <<: *resnet_100
@@ -152,7 +176,7 @@ resnet_100000:
 
   checkpoint:
     <<: *resnet_100-checkpoint
-    save_freq: 30000 # samples
+    save_freq: 300 # batches
 
   tensorboard: 
     <<: *resnet_100-tensorboard

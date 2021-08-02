@@ -42,7 +42,7 @@ def main(experiment, run_name):
 
     callbacks = []
 
-    if run_dir is not None and params.get('checkpoint', False):
+    if params.get('checkpoint', False):
         checkpoint_params = params['checkpoint'].copy()
         checkpoint_params['filepath'] = os.path.join(run_dir, checkpoint_params.pop('filename', 'weights.{epoch:05d}.hdf5'))
         checkpoint_params['verbose'] = checkpoint_params.get('verbose', min(1, params['fit'].get('verbose', 1)))
@@ -53,7 +53,7 @@ def main(experiment, run_name):
         callbacks.append(
             quantumflow.instantiate(params['tensorboard'], log_dir=run_dir, learning_rate=optimizer.learning_rate))
 
-
+    
     model.fit(x=dataset_train.features, 
               y=dataset_train.targets, 
               callbacks=callbacks,
@@ -61,12 +61,9 @@ def main(experiment, run_name):
               **params['fit'])
 
 
-    if params['save_model'] is True:
-        model.save(os.path.join(run_dir, 'model.h5')) 
-
-    if params['export'] is True:
-        export_model = getattr(model, params['export_model']) if not params.get('export_model', 'self') == 'self' else model
-        tf.saved_model.save(export_model, os.path.join(run_dir, 'saved_model'))
+    if params['save'] is True:
+        save_model = getattr(model, params['save_model']) if not params.get('save_model', 'self') == 'self' else model
+        save_model.save(os.path.join(run_dir, 'saved_model'))
 
         
 if __name__ == '__main__':

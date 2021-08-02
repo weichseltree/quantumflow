@@ -30,6 +30,7 @@ default: &default
     num_heads: 8
     dropout_rate: 0.0
     scale: 1.0
+    subsample_inputs: 10
 
 
   metrics: 
@@ -78,7 +79,7 @@ default: &default
 
   checkpoint: &default-checkpoint
     filename: weights.{epoch:03d}.tf
-    save_freq: 2000000 # samples
+    save_freq: 20000 # batches
     save_weights_only: True
 
   tensorboard: &default-tensorboard
@@ -90,6 +91,5 @@ default: &default
     update_freq: epoch
     profile_batch: [10, 20]
 
-  save_model: False
-  export: True
-  export_model: base_model
+  save: True
+  save_model: base_model

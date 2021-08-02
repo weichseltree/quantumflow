@@ -152,6 +152,9 @@ class CrazyNet(tf.keras.layers.Layer):
         self.d_model = d_model
         self.num_layers = num_layers
         self.dff_final = dff_final
+        self.dff = dff
+        self.num_heads = num_heads
+        self.dropout_rate = dropout_rate
         
         self.scale = scale
 
@@ -163,6 +166,17 @@ class CrazyNet(tf.keras.layers.Layer):
         self.pre_final_layers = [tf.keras.layers.Dense(dff, activation='relu') for dff in dff_final]
         self.final_layer = tf.keras.layers.Dense(num_outputs)#, kernel_initializer='zeros')
     
+    def get_config(self):
+        return {
+            "num_outputs": self.num_outputs,
+            "num_layers": self.num_layers,
+            "d_model": self.d_model,
+            "num_heads": self.num_heads,
+            "dff": self.dff,
+            "dff_final": self.dff_final,
+            "dropout_rate": self.dropout_rate,
+            "scale": self.scale,
+        }
     
     def call(self, x, x_inputs, inputs, training=False, mask=None):
         x_all = tf.concat([tf.expand_dims(x, axis=-2), x_inputs], axis=-2) # (..., input_size+1, num_dims)

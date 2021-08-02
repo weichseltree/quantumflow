@@ -22,6 +22,9 @@ class XLayer(tf.keras.layers.Layer):
             tf.repeat(tf.repeat(self.x_inputs, self.x.shape[1], axis=1), tf.shape(density)[0], axis=0),
             tf.repeat(tf.expand_dims(tf.expand_dims(density[:, ::self.subsample_inputs], axis=-1), axis=1), self.x.shape[1], axis=1)
         )
+    
+    def get_config(self):
+        return {"subsample_inputs": self.subsample_inputs}
 
     
 def CrazyNet_KineticEnergyDensityFunctional(run_dir, dataset, subsample_inputs=1, **kwargs):    

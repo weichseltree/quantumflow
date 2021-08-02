@@ -15,7 +15,7 @@ default: &default
     targets: 
       - kinetic_energy
       - kinetic_energy_density
-      - derivative
+      #- derivative
 
   dataset_validate:
     <<: *default-dataset_train
@@ -36,17 +36,17 @@ default: &default
   metrics: 
     kinetic_energy: mean_absolute_error
     kinetic_energy_density: mean_absolute_error
-    derivative: mean_absolute_error
+    #derivative: mean_absolute_error
 
   loss: 
     kinetic_energy: mean_squared_error
     kinetic_energy_density: mean_squared_error
-    derivative: mean_squared_error
+    #derivative: mean_squared_error
 
   loss_weights:
     kinetic_energy: 0
     kinetic_energy_density: 1.0
-    derivative: 1.0
+    #derivative: 1.0
 
   optimizer: &default-optimizer
     class: quantumflow.utils.Adam
@@ -69,11 +69,11 @@ default: &default
       cold_factor: 1.0
 
   fit: &default-fit
-    batch_size: 100
-    epochs: 100000
+    batch_size: 1
+    epochs: 1000
     verbose: 0
     #validation_split: 0.1
-    validation_freq: 10000  # epochs
+    validation_freq: 100  # epochs
     shuffle: True
     initial_epoch: 0
 
@@ -84,8 +84,8 @@ default: &default
 
   tensorboard: &default-tensorboard
     class: quantumflow.utils.CustomTensorBoard
-    histogram_freq: 10000 # epochs
-    metrics_freq: 100 # epochs
+    histogram_freq: 100 # epochs
+    metrics_freq: 1 # epochs
     write_graph: True
     write_images: True
     update_freq: epoch

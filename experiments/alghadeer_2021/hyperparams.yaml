@@ -1,0 +1,121 @@
+datasets/3GD: &3GD_dataset
+  class: quantumflow.noninteracting_1d.Non1D_QFDataset
+  filename: 'dataset.hdf5'
+
+  potentials: &3GD_dataset-potentials
+    class: quantumflow.noninteracting_1d.PotentialDataset
+    discretisation_points: 500
+    interval_length: 1.0
+    n_gauss: 3
+    a_minmax: [0.0, 10.0]
+    b_minmax: [0.4, 0.6]
+    c_minmax: [0.03, 0.1]
+    n_method: 'sum'
+    
+  seed: -1
+  N: 5
+  dtype: 'float64'
+  dataset_size: 1000
+  generate_batch_size: 10000
+  numerov_init_slope: 5.0
+
+
+datasets/PiB: 
+  <<: *3GD_dataset
+  seed: 0
+  dataset_size: 1000
+  potentials: 
+    <<: *3GD_dataset-potentials
+    a_minmax: [0.0, 0.0]
+    # TODO: variate L !
+
+
+recreate: &recreate
+  seed: 0
+
+  dataset_train: &recreate-dataset_train
+    class: quantumflow.noninteracting_1d.DensityKineticEnergyDataset
+    experiment: alghadeer_2021
+    run_name: datasets/3GD
+    N: 'all'
+    dtype: float64
+    subtract_von_weizsaecker: False
+
+    features: 
+      - density
+
+    targets: 
+      - kinetic_energy
+
+  dataset_validate:
+    <<: *recreate-dataset_train
+    run_name: datasets/3GD
+
+  model: &recreate-model
+    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
+    base_model: &recreate-model-base_model
+      class: quantumflow.noninteracting_1d.ResNet_KineticEnergyDensityFunctional
+      l2_regularisation: 0.00025
+
+
+  metrics: 
+    kinetic_energy: mean_absolute_error
+    kinetic_energy_density: mean_absolute_error
+    derivative: mean_absolute_error
+
+  loss: 
+    kinetic_energy: mean_squared_error
+    kinetic_energy_density: mean_squared_error
+    derivative: mean_squared_error
+
+  loss_weights:
+    kinetic_energy: 0
+    kinetic_energy_density: 1.0
+    derivative: 1.0
+
+  optimizer: 
+    class: quantumflow.utils.Adam
+    beta_1: 0.9
+    beta_2: 0.999
+    epsilon: 1e-07
+    amsgrad: False
+
+    clipnorm: 100.0
+
+    learning_rate: 
+      class: quantumflow.utils.WarmupExponentialDecay
+      initial_learning_rate: 0.0001
+      final_learning_rate: 0.0000000001
+      decay_rate: 0.9
+      decay_steps: 1000 # batches
+
+      cold_steps: 21800 # batches
+      warmup_steps: 0 # batches
+      cold_factor: 1.0
+
+  fit:
+    batch_size: 100
+    epochs: 100000
+    verbose: 0
+    #validation_split: 0.1
+    validation_freq: 10000  # epochs
+    shuffle: True
+    initial_epoch: 0
+
+  checkpoint:
+    filename: weights.{epoch:03d}.tf
+    save_freq: 2000000 # samples
+    save_weights_only: True
+
+  tensorboard: 
+    class: quantumflow.utils.CustomTensorBoard
+    histogram_freq: 10000 # epochs
+    metrics_freq: 100 # epochs
+    write_graph: True
+    write_images: True
+    update_freq: epoch
+    profile_batch: [10, 20]
+
+  save_model: False
+  export: True
+  export_model: base_model

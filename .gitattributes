@@ -25,6 +25,8 @@
 # Jupyter notebook
 # ================
 *.ipynb  text -diff
+*.ipynb  diff=jupyternotebook
+*.ipynb  merge=jupyternotebook
 *.ipynb  filter=clean_notebook
 
 # Note: .db, .p, and .pkl files are associated

@@ -109,27 +109,136 @@ default_10:
     metrics_freq: 10 # epochs
 
 
-default_while_loop:
+default_while:
   <<: *default
   
   model:
-    class: quantumflow.crazynet.CrazyNet
+    <<: *default-model
     num_layers: 8
     d_model: 64
     dff: 128
     dff_final: [128, 64]
     num_heads: 8
-    dropout_rate: 0.0
-    scale: 1.0
-    #subsample_inputs: 1
+    
+    subsample_inputs: 1
+    loop: False
     
   fit: 
     <<: *default-fit
     batch_size: 100
-    epochs: 100000
-    validation_freq: 10000  # epochs
+    epochs: 10000
+    validation_freq: 1000  # epochs
     
   tensorboard: 
     <<: *default-tensorboard
-    histogram_freq: 10000 # epochs
-    metrics_freq: 100 # epochs
+    histogram_freq: 1000 # epochs
+    metrics_freq: 10 # epochs
+    
+    
+default_deriv:
+  <<: *default
+  
+  dataset_train: &default_deriv-dataset_train
+    <<: *default-dataset_train
+    targets: 
+      - kinetic_energy
+      - kinetic_energy_density
+      - derivative
+      
+  dataset_validate:
+    <<: *default_deriv-dataset_train
+    run_name: validate_dataset
+
+  model:
+    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
+    base_model:
+      <<: *default-model
+      
+  metrics: 
+    kinetic_energy: mean_absolute_error
+    kinetic_energy_density: mean_absolute_error
+    derivative: mean_absolute_error
+
+  loss: 
+    kinetic_energy: mean_squared_error
+    kinetic_energy_density: mean_squared_error
+    derivative: mean_squared_error
+
+  loss_weights:
+    kinetic_energy: 0
+    kinetic_energy_density: 1.0
+    derivative: 10.0
+
+
+########################################################################
+
+datasets/train: &datasets_train
+  class: quantumflow.noninteracting_1d.Non1D_QFDataset
+  filename: 'dataset.hdf5'
+
+  potentials: &datasets_train-potentials
+    class: quantumflow.noninteracting_1d.PotentialDataset
+    discretisation_points: 101
+    interval_length: 1.0
+    n_gauss: 3
+    a_minmax: [0.0, 10.0]
+    b_minmax: [0.4, 0.6]
+    c_minmax: [0.03, 0.1]
+    n_method: 'sum'
+    
+  seed: 0
+  N: 4
+  dtype: 'float64'
+  dataset_size: 100000
+  generate_batch_size: 10000
+  numerov_init_slope: 5.0
+
+
+datasets/train_small:
+  <<: *datasets_train
+  seed: 0
+  dataset_size: 100
+
+
+datasets/validate:
+  <<: *datasets_train
+  seed: -1
+  dataset_size: 1000
+
+
+default_full:
+  <<: *default
+  
+  dataset_train: &default_full-dataset_train
+    <<: *default-dataset_train
+    experiment: crazynet
+    run_name: datasets/train_small
+    targets: 
+      - kinetic_energy
+      - kinetic_energy_density
+      - derivative
+      
+  dataset_validate:
+    <<: *default_full-dataset_train
+    run_name: datasets/validate
+
+  model:
+    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
+    base_model:
+      <<: *default-model
+      subsample_inputs: 1
+      
+  metrics: 
+    kinetic_energy: mean_absolute_error
+    kinetic_energy_density: mean_absolute_error
+    derivative: mean_absolute_error
+
+  loss: 
+    kinetic_energy: mean_squared_error
+    kinetic_energy_density: mean_squared_error
+    derivative: mean_squared_error
+
+  loss_weights:
+    kinetic_energy: 0
+    kinetic_energy_density: 1.0
+    derivative: 1.0

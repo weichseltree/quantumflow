@@ -3,7 +3,7 @@ import numpy as np
 
 import quantumflow
 
-from .transformer import CrazyNet
+from .transformer import CrazyNet, TFWhileCrazyNet
 from quantumflow.noninteracting_1d import IntegrateLayer
 
 
@@ -27,12 +27,16 @@ class XLayer(tf.keras.layers.Layer):
         return {"subsample_inputs": self.subsample_inputs}
 
     
-def CrazyNet_KineticEnergyDensityFunctional(run_dir, dataset, subsample_inputs=1, **kwargs):    
+    
+def CrazyNet_KineticEnergyDensityFunctional(run_dir, dataset, subsample_inputs=1, loop=False, **kwargs):    
     density = tf.keras.layers.Input(shape=dataset.density.shape[1:], name='density')
     
     x, x_inputs, inputs = XLayer(dataset, subsample_inputs)(density)
 
-    value = CrazyNet(num_outputs=1, **kwargs)(x, x_inputs, inputs)
+    if loop:
+        value = TFWhileCrazyNet(num_outputs=1, **kwargs)(x, x_inputs, inputs)
+    else:
+        value = CrazyNet(num_outputs=1, **kwargs)(x, x_inputs, inputs)
     
     kinetic_energy_density = tf.keras.layers.Lambda(lambda x: tf.reduce_sum(x, axis=-1), name='kinetic_energy_density')(value)
     kinetic_energy = IntegrateLayer(dataset.h, name='kinetic_energy')(kinetic_energy_density)

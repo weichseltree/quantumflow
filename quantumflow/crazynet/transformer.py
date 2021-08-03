@@ -178,7 +178,7 @@ class CrazyNet(tf.keras.layers.Layer):
             "scale": self.scale,
         }
     
-    def call(self, x, x_inputs, inputs, training=False, mask=None):
+    def call(self, x, x_inputs, inputs, training=False, mask=None):        
         x_all = tf.concat([tf.expand_dims(x, axis=-2), x_inputs], axis=-2) # (..., input_size+1, num_dims)
         xdiff = get_xdiff(x_all, x_all)/self.scale # (..., input_size+1, input_size+1)
         
@@ -200,5 +200,49 @@ class CrazyNet(tf.keras.layers.Layer):
         outputs = self.final_layer(value)
         
         return outputs # (..., num_outputs)
+
+
+class TFWhileCrazyNet(CrazyNet):
     
-    
+    def call(self, all_x, all_x_inputs, all_inputs, training=False, mask=None):
+        num_x = tf.shape(all_x)[1]
+
+        x = tf.TensorArray(all_x.dtype, num_x).unstack(tf.transpose(all_x, perm=[1, 0, 2]))
+        x_inputs = tf.TensorArray(all_x_inputs.dtype, num_x).unstack(tf.transpose(all_x_inputs, perm=[1, 0, 2, 3]))
+        inputs = tf.TensorArray(all_inputs.dtype, num_x).unstack(tf.transpose(all_inputs, perm=[1, 0, 2, 3]))
+        
+        output = super().call(x.read(0), x_inputs.read(0), inputs.read(0), training=training, mask=mask)
+
+        output_x = tf.TensorArray(output.dtype, num_x).write(0, output)
+
+        for t in tf.range(1, num_x):
+            tf.autograph.experimental.set_loop_options(
+                parallel_iterations=1,
+                swap_memory=True,
+                maximum_iterations=num_x-1)
+
+            output = super().call(x.read(t), x_inputs.read(t), inputs.read(t), training=training, mask=mask)
+            output_x = output_x.write(t, output)
+
+        '''
+        output = tf.TensorArray(inputs.dtype, num_x)
+
+        def step(i, x, x_inputs, inputs, output):
+            output = output.write(i, self.crazynet(x.read(i), x_inputs.read(i), inputs.read(i), training=training, mask=mask))
+            return i + 1, x, x_inputs, inputs, output
+        
+        _, _, _, _, output = tf.while_loop(
+            cond=lambda i, x, x_inputs, inputs, output: tf.less(i, num_x),
+            body=step,
+            loop_vars = (
+                tf.constant(0, dtype=tf.int32),
+                x, x_inputs, inputs, output
+            ),
+            parallel_iterations=1,
+            swap_memory=True,
+            maximum_iterations=num_x-1
+        )
+        '''
+            
+        all_output = tf.transpose(tf.TensorArray.stack(output_x), perm=[1, 0, 2])
+        return all_output

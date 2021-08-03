@@ -107,3 +107,29 @@ default_10:
     <<: *default-tensorboard
     histogram_freq: 1000 # epochs
     metrics_freq: 10 # epochs
+
+
+default_while_loop:
+  <<: *default
+  
+  model:
+    class: quantumflow.crazynet.CrazyNet
+    num_layers: 8
+    d_model: 64
+    dff: 128
+    dff_final: [128, 64]
+    num_heads: 8
+    dropout_rate: 0.0
+    scale: 1.0
+    #subsample_inputs: 1
+    
+  fit: 
+    <<: *default-fit
+    batch_size: 100
+    epochs: 100000
+    validation_freq: 10000  # epochs
+    
+  tensorboard: 
+    <<: *default-tensorboard
+    histogram_freq: 10000 # epochs
+    metrics_freq: 100 # epochs

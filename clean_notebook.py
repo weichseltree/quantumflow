@@ -28,6 +28,11 @@ def strip_output(nb):
             cell['execution_count'] = None
         if 'prompt_number' in cell:
             cell['prompt_number'] = None
+        if 'metadata' in cell:
+            if 'jupyter' in cell['metadata']:
+                cell['metadata'] = {'jupyter': cell['metadata']['jupyter']}
+            else:
+                cell['metadata'] = {}
     return nb
 
 

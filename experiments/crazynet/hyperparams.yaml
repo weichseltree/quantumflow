@@ -92,4 +92,18 @@ default: &default
     profile_batch: [10, 20]
 
   save: True
-  save_model: base_model
+
+
+default_10:
+  <<: *default
+  
+  fit: 
+    <<: *default-fit
+    batch_size: 10
+    epochs: 10000
+    validation_freq: 1000  # epochs
+    
+  tensorboard: 
+    <<: *default-tensorboard
+    histogram_freq: 1000 # epochs
+    metrics_freq: 10 # epochs

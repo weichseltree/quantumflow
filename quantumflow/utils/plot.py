@@ -1,4 +1,6 @@
 import ipywidgets as widgets
+import numpy as np
+
 from IPython.display import HTML, display
 from matplotlib import animation, rc
 import matplotlib.pyplot as plt

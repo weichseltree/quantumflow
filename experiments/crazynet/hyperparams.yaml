@@ -25,6 +25,7 @@ default: &default
     class: quantumflow.crazynet.CrazyNet_KineticEnergyDensityFunctional
     num_layers: 8
     d_model: 64
+    dff_input: [64, 128]
     dff: 128
     dff_final: [128, 64]
     num_heads: 8

@@ -40,21 +40,21 @@ def metric_scaled_dot_product_attention(q, k, v, alpha, beta, xdiff, mask=None):
     # scale matmul_qk
     dk = tf.cast(tf.shape(k)[-1], tf.float32)
     scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
-
-    # add the mask to the scaled tensor.
-    if mask is not None:
-        scaled_attention_logits += (mask * -1e9)
-        
+     
     # v1
-    metric_attention_logits = tf.expand_dims(alpha, axis=-1)*xdiff + tf.expand_dims(beta, axis=-1) * xdiff**2
+    scaled_attention_logits += tf.expand_dims(alpha, axis=-1)*xdiff + tf.expand_dims(beta, axis=-1) * xdiff**2
     
     # v2
     #beta = tf.sqrt(tf.sqrt(tf.square(beta)+1))-1
-    #metric_attention_logits = -0.5*tf.expand_dims(beta, axis=-1) * tf.square(xdiff - tf.expand_dims(alpha, axis=-1))
+    #scaled_attention_logits += -0.5*tf.expand_dims(beta, axis=-1) * tf.square(xdiff - tf.expand_dims(alpha, axis=-1))
     
+    # add the mask to the scaled tensor.
+    if mask is not None:
+        scaled_attention_logits += (mask * -1e9)
+   
     # softmax is normalized on the last axis (size_k) so that the scores
     # add up to 1.
-    attention_weights = tf.nn.softmax(scaled_attention_logits + metric_attention_logits, axis=-1)  # (..., size_q, size_k)
+    attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)  # (..., size_q, size_k)
     
     output = tf.matmul(attention_weights, v)  # (..., size_q, depth_v)
 
@@ -146,11 +146,12 @@ class MetricEncoderLayer(tf.keras.layers.Layer):
 
     
 class CrazyNet(tf.keras.layers.Layer):
-    def __init__(self, num_outputs, num_layers, d_model, num_heads, dff, dff_final, dropout_rate=0.1, scale=1.0):
+    def __init__(self, num_outputs, num_layers, d_model, num_heads, dff_input, dff, dff_final, dropout_rate=0.1, scale=1.0):
         super().__init__()
         self.num_outputs = num_outputs
         self.d_model = d_model
         self.num_layers = num_layers
+        self.dff_input = dff_input
         self.dff_final = dff_final
         self.dff = dff
         self.num_heads = num_heads
@@ -158,13 +159,13 @@ class CrazyNet(tf.keras.layers.Layer):
         
         self.scale = scale
 
-        self.input_layer = tf.keras.layers.Dense(d_model, activation='relu')
+        self.input_layers = [tf.keras.layers.Dense(d_model, activation='sigmoid') for dff in dff_input]
         self.x_token = self.add_weight(name='x_token', shape=(d_model,), dtype=tf.float32, trainable=True) # (d_model)
     
         self.enc_layers = [MetricEncoderLayer(d_model, num_heads, dff, dropout_rate) for _ in range(num_layers)]
 
-        self.pre_final_layers = [tf.keras.layers.Dense(dff, activation='relu') for dff in dff_final]
-        self.final_layer = tf.keras.layers.Dense(num_outputs)#, kernel_initializer='zeros')
+        self.pre_final_layers = [tf.keras.layers.Dense(dff, activation='sigmoid') for dff in dff_final]
+        self.final_layer = tf.keras.layers.Dense(num_outputs, kernel_initializer='zeros')
     
     def get_config(self):
         return {
@@ -172,6 +173,7 @@ class CrazyNet(tf.keras.layers.Layer):
             "num_layers": self.num_layers,
             "d_model": self.d_model,
             "num_heads": self.num_heads,
+            "dff_input": self.dff_input,
             "dff": self.dff,
             "dff_final": self.dff_final,
             "dropout_rate": self.dropout_rate,
@@ -187,7 +189,11 @@ class CrazyNet(tf.keras.layers.Layer):
             x_token = tf.repeat(tf.expand_dims(x_token, axis=-2), shape, axis=-2)
         x_token = tf.expand_dims(x_token, axis=-2) # (..., 1, d_model)
         
-        value = all_inputs = tf.concat([x_token, self.input_layer(inputs)], axis=-2)
+        value = inputs
+        for layer in self.input_layers:
+            value = layer(value)
+            
+        value = all_inputs = tf.concat([x_token, value], axis=-2)
         
         for i in range(self.num_layers):
             value = self.enc_layers[i](value, xdiff, training=training, mask=mask)

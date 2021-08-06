@@ -114,7 +114,7 @@ recreate: &recreate
     write_graph: True
     write_images: True
     update_freq: epoch
-    profile_batch: [10, 20]
+    profile_batch: 0
 
   save_model: False
   export: True

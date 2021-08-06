@@ -14,7 +14,7 @@ def point_wise_feed_forward_network(d_model, dff):
         tf.keras.layers.Dense(d_model)  # (..., seq_len, d_model)
     ])
 
-def metric_scaled_dot_product_attention(q, k, v, alpha, beta, xdiff, mask=None):
+def scaled_dot_product_attention(q, k, v, initial_attention_logits=None, mask=None):
     """Calculate the attention weights.
     q, k, v must have matching leading dimensions.
     k, v must have matching penultimate dimension, i.e.: size_k = size_v.
@@ -40,25 +40,21 @@ def metric_scaled_dot_product_attention(q, k, v, alpha, beta, xdiff, mask=None):
     # scale matmul_qk
     dk = tf.cast(tf.shape(k)[-1], tf.float32)
     scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
-     
-    # v1
-    scaled_attention_logits += tf.expand_dims(alpha, axis=-1)*xdiff + tf.expand_dims(beta, axis=-1) * xdiff**2
-    
-    # v2
-    #beta = tf.sqrt(tf.sqrt(tf.square(beta)+1))-1
-    #scaled_attention_logits += -0.5*tf.expand_dims(beta, axis=-1) * tf.square(xdiff - tf.expand_dims(alpha, axis=-1))
+
+    if initial_attention_logits is not None:
+        scaled_attention_logits += initial_attention_logits
     
     # add the mask to the scaled tensor.
     if mask is not None:
         scaled_attention_logits += (mask * -1e9)
-   
+       
     # softmax is normalized on the last axis (size_k) so that the scores
     # add up to 1.
     attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)  # (..., size_q, size_k)
     
     output = tf.matmul(attention_weights, v)  # (..., size_q, depth_v)
-
-    return output, attention_weights
+    
+    return output, scaled_attention_logits
 
 
 class MetricMultiHeadAttention(tf.keras.layers.Layer):
@@ -71,12 +67,13 @@ class MetricMultiHeadAttention(tf.keras.layers.Layer):
 
         self.depth = d_model // self.num_heads
 
-        self.wq = tf.keras.layers.Dense(d_model)
-        self.wk = tf.keras.layers.Dense(d_model)
-        self.wv = tf.keras.layers.Dense(d_model)
-        self.wa = tf.keras.layers.Dense(self.num_heads)#, kernel_initializer='zeros')
-        self.wb = tf.keras.layers.Dense(self.num_heads)#, kernel_initializer='zeros')
-
+        self.wq = tf.keras.layers.Dense(d_model, name='q')
+        self.wk = tf.keras.layers.Dense(d_model, name='k')
+        self.wv = tf.keras.layers.Dense(d_model, name='v')
+        
+        self.wa = tf.keras.layers.Dense(self.num_heads, name='a', kernel_initializer='zeros')
+        self.wb = tf.keras.layers.Dense(self.num_heads, name='b', kernel_initializer='zeros')
+        
         self.dense = tf.keras.layers.Dense(d_model)
 
     def split_heads(self, x, batch_sizes):
@@ -92,9 +89,9 @@ class MetricMultiHeadAttention(tf.keras.layers.Layer):
         q = self.wq(q)  # (..., size_q, d_model)
         k = self.wk(k)  # (..., size_k, d_model)
         v = self.wv(v)  # (..., size_v, d_model)
+        
         a = self.wa(q)  # (..., size_q, num_heads)
         b = self.wb(q)  # (..., size_q, num_heads)
-        
         
         q = self.split_heads(q, batch_sizes)  # (..., num_heads, size_q, depth)
         k = self.split_heads(k, batch_sizes)  # (..., num_heads, size_k, depth)
@@ -105,15 +102,18 @@ class MetricMultiHeadAttention(tf.keras.layers.Layer):
         
         xdiff = tf.expand_dims(xdiff, axis=-3) # (..., num_heads, size_q, size_k)
         
-        # scaled_attention.shape == (batch_size, num_heads, size_q, depth)
-        # attention_weights.shape == (batch_size, num_heads, size_q, size_k)
-        scaled_attention, attention_weights = metric_scaled_dot_product_attention(q, k, v, a, b, xdiff, mask=mask)
+        metric_attention_logits = tf.expand_dims(a, axis=-1)*xdiff + tf.expand_dims(b, axis=-1) * xdiff**2
+         
+        # scaled_attention.shape == (..., num_heads, size_q, depth)
+        # attention_weights.shape == (..., num_heads, size_q, size_k)
+        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, metric_attention_logits, mask=mask)
 
-        scaled_attention = tf.transpose(scaled_attention, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes), len(batch_sizes)+2])  # (batch_size, size_q, num_heads, depth)
+        scaled_attention = tf.transpose(scaled_attention, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes), len(batch_sizes)+2])  
+        # (..., size_q, num_heads, depth)
 
-        concat_attention = tf.reshape(scaled_attention, batch_sizes + [-1, self.d_model])  # (batch_size, size_q, d_model)
+        concat_attention = tf.reshape(scaled_attention, batch_sizes + [-1, self.d_model])  # (..., size_q, d_model)
 
-        output = self.dense(concat_attention)  # (batch_size, size_q, d_model)
+        output = self.dense(concat_attention)  # (..., size_q, d_model)
 
         return output, attention_weights
 
@@ -153,18 +153,19 @@ class CrazyNet(tf.keras.layers.Layer):
         self.num_layers = num_layers
         self.dff_input = dff_input
         self.dff_final = dff_final
+        #self.xdff = xdff
         self.dff = dff
         self.num_heads = num_heads
         self.dropout_rate = dropout_rate
         
         self.scale = scale
 
-        self.input_layers = [tf.keras.layers.Dense(d_model, activation='sigmoid') for dff in dff_input]
+        self.input_layers = [tf.keras.layers.Dense(d_model, activation='softplus' if d == 0 else 'relu') for d, dff in enumerate(dff_input)]
         self.x_token = self.add_weight(name='x_token', shape=(d_model,), dtype=tf.float32, trainable=True) # (d_model)
     
         self.enc_layers = [MetricEncoderLayer(d_model, num_heads, dff, dropout_rate) for _ in range(num_layers)]
 
-        self.pre_final_layers = [tf.keras.layers.Dense(dff, activation='sigmoid') for dff in dff_final]
+        self.pre_final_layers = [tf.keras.layers.Dense(dff, activation='relu') for dff in dff_final]
         self.final_layer = tf.keras.layers.Dense(num_outputs, kernel_initializer='zeros')
     
     def get_config(self):
@@ -174,6 +175,7 @@ class CrazyNet(tf.keras.layers.Layer):
             "d_model": self.d_model,
             "num_heads": self.num_heads,
             "dff_input": self.dff_input,
+            #"xdff": self.xdff,
             "dff": self.dff,
             "dff_final": self.dff_final,
             "dropout_rate": self.dropout_rate,
@@ -182,7 +184,7 @@ class CrazyNet(tf.keras.layers.Layer):
     
     def call(self, x, x_inputs, inputs, training=False, mask=None):        
         x_all = tf.concat([tf.expand_dims(x, axis=-2), x_inputs], axis=-2) # (..., input_size+1, num_dims)
-        xdiff = get_xdiff(x_all, x_all)/self.scale # (..., input_size+1, input_size+1)
+        xdiff = 10*get_xdiff(x_all, x_all)/self.scale # (..., input_size+1, input_size+1)
         
         x_token = self.x_token # (d_model)
         for shape in tf.unstack(tf.shape(x))[:-1]:
@@ -193,12 +195,12 @@ class CrazyNet(tf.keras.layers.Layer):
         for layer in self.input_layers:
             value = layer(value)
             
-        value = all_inputs = tf.concat([x_token, value], axis=-2)
+        value = tf.concat([x_token, value], axis=-2)
         
         for i in range(self.num_layers):
             value = self.enc_layers[i](value, xdiff, training=training, mask=mask)
 
-        value = value[..., 0]
+        value = value[..., 0, :]
         
         for layer in self.pre_final_layers:
             value = layer(value)

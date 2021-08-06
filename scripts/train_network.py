@@ -20,6 +20,7 @@ def main(experiment, run_name):
     dataset_validate = quantumflow.instantiate(params['dataset_validate'], run_dir=run_dir)
     dataset_validate.build()
     
+    tf.profiler.experimental.server.start(6009)
     tf.keras.backend.clear_session()
     tf.random.set_seed(params['seed'])
 

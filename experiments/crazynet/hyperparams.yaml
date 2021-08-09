@@ -90,7 +90,7 @@ default: &default
     write_graph: True
     write_images: True
     update_freq: epoch
-    profile_batch: 0
+    profile_batch: [10, 20]
 
   save: True
 
@@ -268,8 +268,12 @@ default_full_wide:
       dff_final: [128, 64]
       num_heads: 8
       
-default_full_lamb:
-  <<: *default_full
+      
+default_2:
+  <<: *default
+      
+default_lamb:
+  <<: *default
 
   optimizer:
     class: quantumflow.utils.LAMB

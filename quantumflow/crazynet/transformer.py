@@ -44,7 +44,6 @@ def scaled_dot_product_attention(q, k, v, initial_attention_logits=None, mask=No
     dk = tf.cast(tf.shape(k)[-1], tf.float32)
     scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
 
-    
     # add the mask to the scaled tensor.
     if mask is not None:
         scaled_attention_logits += (mask * -1e9)
@@ -72,8 +71,8 @@ class MetricMultiHeadAttention(tf.keras.layers.Layer):
         self.wk = tf.keras.layers.Dense(d_model, name='k')
         self.wv = tf.keras.layers.Dense(d_model, name='v')
         
-        self.wa = tf.keras.layers.Dense(self.num_heads, name='a', kernel_initializer='zeros')
-        self.wb = tf.keras.layers.Dense(self.num_heads, name='b', kernel_initializer='zeros')
+        self.wa = tf.keras.layers.Dense(self.num_heads, name='a')
+        self.wb = tf.keras.layers.Dense(self.num_heads, name='b')
         
         self.dense = tf.keras.layers.Dense(d_model)
 
@@ -154,7 +153,6 @@ class CrazyNet(tf.keras.layers.Layer):
         self.num_layers = num_layers
         self.dff_input = dff_input
         self.dff_final = dff_final
-        #self.xdff = xdff
         self.dff = dff
         self.num_heads = num_heads
         self.dropout_rate = dropout_rate
@@ -167,7 +165,7 @@ class CrazyNet(tf.keras.layers.Layer):
         self.enc_layers = [MetricEncoderLayer(d_model, num_heads, dff, dropout_rate) for _ in range(num_layers)]
 
         self.pre_final_layers = [tf.keras.layers.Dense(dff, activation='relu') for dff in dff_final]
-        self.final_layer = tf.keras.layers.Dense(num_outputs, kernel_initializer='zeros')
+        self.final_layer = tf.keras.layers.Dense(num_outputs)
     
     def get_config(self):
         return {
@@ -176,7 +174,6 @@ class CrazyNet(tf.keras.layers.Layer):
             "d_model": self.d_model,
             "num_heads": self.num_heads,
             "dff_input": self.dff_input,
-            #"xdff": self.xdff,
             "dff": self.dff,
             "dff_final": self.dff_final,
             "dropout_rate": self.dropout_rate,

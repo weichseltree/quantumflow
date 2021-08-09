@@ -3,7 +3,7 @@ import numpy as np
 
 import quantumflow
 
-from .transformer import XdiffTransformer, TFWhileXdiffTransformer
+from .transformer import XdiffTransformer, TFWhileXdiffTransformer, XdiffPerciever
 from quantumflow.noninteracting_1d import IntegrateLayer
 
 
@@ -20,7 +20,7 @@ class XLayer(tf.keras.layers.Layer):
         return (
             tf.repeat(self.x, tf.shape(density)[0], axis=0),
             tf.repeat(tf.repeat(self.x_inputs, self.x.shape[1], axis=1), tf.shape(density)[0], axis=0),
-            tf.repeat(tf.expand_dims(tf.expand_dims(density[:, ::self.subsample_inputs], axis=-1), axis=1), self.x.shape[1], axis=1)
+            tf.ensure_shape(tf.repeat(tf.expand_dims(tf.expand_dims(density[:, ::self.subsample_inputs], axis=-1), axis=1), self.x.shape[1], axis=1), (None, self.x.shape[1], self.x.shape[1]//self.subsample_inputs, 1))
         )
     
     def get_config(self):
@@ -34,11 +34,25 @@ def XdiffTransformer_KineticEnergyDensityFunctional(run_dir, dataset, subsample_
     x, x_inputs, inputs = XLayer(dataset, subsample_inputs)(density)
 
     if loop:
-        value = TFWhileCrazyNet(num_outputs=1, **kwargs)(x, x_inputs, inputs)
+        value = TFWhileXdiffTransformer(num_outputs=1, **kwargs)(x, x_inputs, inputs)
     else:
-        value = CrazyNet(num_outputs=1, **kwargs)(x, x_inputs, inputs)
+        value = XdiffTransformer(num_outputs=1, **kwargs)(x, x_inputs, inputs)
     
     kinetic_energy_density = tf.keras.layers.Lambda(lambda x: tf.reduce_sum(x, axis=-1), name='kinetic_energy_density')(value)
+    kinetic_energy = IntegrateLayer(dataset.h, name='kinetic_energy')(kinetic_energy_density)
+    
+    return tf.keras.Model(inputs={'density': density}, outputs={'kinetic_energy': kinetic_energy, 'kinetic_energy_density': kinetic_energy_density})
+
+
+def XdiffPerciever_KineticEnergyDensityFunctional(run_dir, dataset, **kwargs):    
+    density = tf.keras.layers.Input(shape=dataset.density.shape[1:], name='density')
+    
+    x, x_inputs, inputs = XLayer(dataset, subsample_inputs=1)(density)
+    x = tf.keras.layers.Lambda(lambda x: tf.expand_dims(x, axis=-2), name='x_expand')(x)
+
+    value = XdiffPerciever(num_outputs=1, **kwargs)(x, x_inputs, inputs)
+    
+    kinetic_energy_density = tf.keras.layers.Lambda(lambda x: tf.reduce_sum(x[..., 0], axis=-1), name='kinetic_energy_density')(value)
     kinetic_energy = IntegrateLayer(dataset.h, name='kinetic_energy')(kinetic_energy_density)
     
     return tf.keras.Model(inputs={'density': density}, outputs={'kinetic_energy': kinetic_energy, 'kinetic_energy_density': kinetic_energy_density})

@@ -207,7 +207,7 @@ datasets/validate:
   dataset_size: 1000
 
 
-default_full:
+default_full: &default_full
   <<: *default
   
   dataset_train: &default_full-dataset_train
@@ -243,3 +243,27 @@ default_full:
     kinetic_energy: 0
     kinetic_energy_density: 1.0
     derivative: 1.0
+    
+    
+default_full_xdiff_fix:
+  <<: *default_full
+
+    
+default_full_xdiff_fix_2:
+  <<: *default_full
+
+
+default_full_wide:
+  <<: *default_full
+  
+  model:
+    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
+    base_model:
+      <<: *default-model
+      subsample_inputs: 1
+      
+      num_layers: 12
+      d_model: 128
+      dff: 128
+      dff_final: [128, 64]
+      num_heads: 8

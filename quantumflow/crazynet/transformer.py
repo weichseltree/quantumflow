@@ -37,12 +37,13 @@ def scaled_dot_product_attention(q, k, v, initial_attention_logits=None, mask=No
 
     matmul_qk = tf.matmul(q, k, transpose_b=True)  # (..., size_q, size_k)
 
+    if initial_attention_logits is not None:
+        matmul_qk += initial_attention_logits
+        
     # scale matmul_qk
     dk = tf.cast(tf.shape(k)[-1], tf.float32)
     scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
 
-    if initial_attention_logits is not None:
-        scaled_attention_logits += initial_attention_logits
     
     # add the mask to the scaled tensor.
     if mask is not None:
@@ -184,7 +185,7 @@ class CrazyNet(tf.keras.layers.Layer):
     
     def call(self, x, x_inputs, inputs, training=False, mask=None):        
         x_all = tf.concat([tf.expand_dims(x, axis=-2), x_inputs], axis=-2) # (..., input_size+1, num_dims)
-        xdiff = 10*get_xdiff(x_all, x_all)/self.scale # (..., input_size+1, input_size+1)
+        xdiff = get_xdiff(x_all, x_all)/self.scale # (..., input_size+1, input_size+1)
         
         x_token = self.x_token # (d_model)
         for shape in tf.unstack(tf.shape(x))[:-1]:

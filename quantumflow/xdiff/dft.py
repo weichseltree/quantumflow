@@ -3,7 +3,7 @@ import numpy as np
 
 import quantumflow
 
-from .transformer import CrazyNet, TFWhileCrazyNet
+from .transformer import XdiffTransformer, TFWhileXdiffTransformer
 from quantumflow.noninteracting_1d import IntegrateLayer
 
 
@@ -28,7 +28,7 @@ class XLayer(tf.keras.layers.Layer):
 
     
     
-def CrazyNet_KineticEnergyDensityFunctional(run_dir, dataset, subsample_inputs=1, loop=False, **kwargs):    
+def XdiffTransformer_KineticEnergyDensityFunctional(run_dir, dataset, subsample_inputs=1, loop=False, **kwargs):    
     density = tf.keras.layers.Input(shape=dataset.density.shape[1:], name='density')
     
     x, x_inputs, inputs = XLayer(dataset, subsample_inputs)(density)

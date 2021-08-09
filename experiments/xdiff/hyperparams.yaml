@@ -22,7 +22,7 @@ default: &default
     run_name: validate_dataset
 
   model: &default-model
-    class: quantumflow.crazynet.CrazyNet_KineticEnergyDensityFunctional
+    class: quantumflow.xdiff.XdiffTransformer_KineticEnergyDensityFunctional
     num_layers: 8
     d_model: 64
     dff_input: [64, 128]
@@ -212,7 +212,7 @@ default_full: &default_full
   
   dataset_train: &default_full-dataset_train
     <<: *default-dataset_train
-    experiment: crazynet
+    experiment: xdiff
     run_name: datasets/train_small
     targets: 
       - kinetic_energy

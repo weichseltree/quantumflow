@@ -3,3 +3,4 @@ from .num_diff_int import integrate, np_integrate, derivative_five_point, laplac
 from .plot import anim_plot
 from .yaml import load_yaml, save_yaml
 from .keras import Adam, WarmupExponentialDecay, CustomTensorBoard
+from .lamb import quantumflow_lr_LAMB as LAMB

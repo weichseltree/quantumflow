@@ -267,3 +267,18 @@ default_full_wide:
       dff: 128
       dff_final: [128, 64]
       num_heads: 8
+      
+default_full_lamb:
+  <<: *default_full
+
+  optimizer:
+    class: quantumflow.utils.LAMB
+    beta_1: 0.9
+    beta_2: 0.999
+    epsilon: 1e-6
+    weight_decay_rate: 0.0
+
+    clipnorm: 100.0
+
+    learning_rate: 
+      <<: *default-optimizer-learning_rate

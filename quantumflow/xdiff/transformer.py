@@ -8,9 +8,9 @@ def get_xdiff(x1, x2):
     xdiff = tf.expand_dims(x1, axis=-2) - tf.expand_dims(x2, axis=-3)
     return tf.sqrt(tf.reduce_sum(tf.square(xdiff), axis=-1)) # (..., seq_len, seq_len)
 
-def point_wise_feed_forward_network(d_model, dff):
+def point_wise_feed_forward_network(d_model, dff, activation='relu'):
     return tf.keras.Sequential([
-        tf.keras.layers.Dense(dff, activation='relu'),  # (..., seq_len, dff)
+        tf.keras.layers.Dense(dff, activation=activation),  # (..., seq_len, dff)
         tf.keras.layers.Dense(d_model)  # (..., seq_len, d_model)
     ])
 
@@ -116,11 +116,11 @@ class XdiffMultiHeadAttention(tf.keras.layers.Layer):
 
     
 class XdiffEncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, dropout_rate=0.1):
+    def __init__(self, d_model, num_heads, dff, activation='relu', dropout_rate=0.1):
         super().__init__()
 
         self.mha = XdiffMultiHeadAttention(d_model, num_heads)
-        self.ffn = point_wise_feed_forward_network(d_model, dff)
+        self.ffn = point_wise_feed_forward_network(d_model, dff, activation=activation)
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -143,7 +143,7 @@ class XdiffEncoderLayer(tf.keras.layers.Layer):
 
     
 class XdiffTransformer(tf.keras.layers.Layer):
-    def __init__(self, num_outputs, num_layers, d_model, num_heads, dff_input, dff, dff_final, dropout_rate=0.1, scale=1.0):
+    def __init__(self, num_outputs, num_layers, d_model, num_heads, dff_input, dff, dff_final, activation='relu', dropout_rate=0.1, scale=1.0):
         super().__init__()
         self.num_outputs = num_outputs
         self.d_model = d_model
@@ -153,15 +153,16 @@ class XdiffTransformer(tf.keras.layers.Layer):
         self.dff = dff
         self.num_heads = num_heads
         self.dropout_rate = dropout_rate
+        self.activation = activation
         
         self.scale = scale
 
-        self.input_layers = [tf.keras.layers.Dense(d_model, activation='softplus' if d == 0 else 'relu') for d, dff in enumerate(dff_input)]
+        self.input_layers = [tf.keras.layers.Dense(d_model, activation='softplus' if d == 0 else activation) for d, dff in enumerate(dff_input)]
         self.x_token = self.add_weight(name='x_token', shape=(d_model,), dtype=tf.float32, trainable=True) # (d_model)
     
-        self.enc_layers = [XdiffEncoderLayer(d_model, num_heads, dff, dropout_rate) for _ in range(num_layers)]
+        self.enc_layers = [XdiffEncoderLayer(d_model, num_heads, dff, activation=activation, dropout_rate=dropout_rate) for _ in range(num_layers)]
 
-        self.pre_final_layers = [tf.keras.layers.Dense(dff, activation='relu') for dff in dff_final]
+        self.pre_final_layers = [tf.keras.layers.Dense(dff, activation=activation) for dff in dff_final]
         self.final_layer = tf.keras.layers.Dense(num_outputs)
     
     def get_config(self):
@@ -171,6 +172,7 @@ class XdiffTransformer(tf.keras.layers.Layer):
             "d_model": self.d_model,
             "num_heads": self.num_heads,
             "dff_input": self.dff_input,
+            "activation": self.activation,
             "dff": self.dff,
             "dff_final": self.dff_final,
             "dropout_rate": self.dropout_rate,
@@ -255,11 +257,11 @@ class TFWhileXdiffTransformer(XdiffTransformer):
 
     
 class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, dropout_rate=0.1):
+    def __init__(self, d_model, num_heads, dff, activation='relu', dropout_rate=0.1):
         super().__init__()
 
         self.mha = XdiffMultiHeadAttention(d_model, num_heads)
-        self.ffn = point_wise_feed_forward_network(d_model, dff)
+        self.ffn = point_wise_feed_forward_network(d_model, dff, activation=activation)
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -282,7 +284,7 @@ class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
     
     
 class XdiffPerciever(tf.keras.layers.Layer):
-    def __init__(self, num_outputs, num_layers, num_repeats, d_model, num_heads, dff_input, dff, dff_final, share_weights=False, dropout_rate=0.1, scale=1.0):
+    def __init__(self, num_outputs, num_layers, num_repeats, d_model, num_heads, dff_input, dff, dff_final, share_weights=False, activation='relu', dropout_rate=0.1, scale=1.0):
         super().__init__()
         self.num_outputs = num_outputs
         self.num_layers = num_layers
@@ -296,16 +298,17 @@ class XdiffPerciever(tf.keras.layers.Layer):
         
         self.share_weights = share_weights
         self.dropout_rate = dropout_rate
+        self.activation = activation
         
         self.scale = scale
 
-        self.input_layers = [tf.keras.layers.Dense(d_model, activation='softplus' if d == 0 else 'relu') for d, dff in enumerate(dff_input)]
+        self.input_layers = [tf.keras.layers.Dense(d_model, activation='softplus' if d == 0 else activation) for d, dff in enumerate(dff_input)]
         self.x_token = self.add_weight(name='x_token', shape=(d_model,), dtype=tf.float32, trainable=True) # (d_model)
         
-        self.enc_layers = [[XdiffEncoderLayer(d_model, num_heads, dff, dropout_rate) for _ in range(num_layers)] for _ in range(num_repeats+1)]
-        self.cross_enc_layers = [XdiffCrossEncoderLayer(d_model, num_heads, dff, dropout_rate) for _ in range(num_repeats)]
+        self.enc_layers = [[XdiffEncoderLayer(d_model, num_heads, dff, activation=activation, dropout_rate=dropout_rate) for _ in range(num_layers)] for _ in range(num_repeats+1)]
+        self.cross_enc_layers = [XdiffCrossEncoderLayer(d_model, num_heads, dff, activation=activation, dropout_rate=dropout_rate) for _ in range(num_repeats)]
 
-        self.pre_final_layers = [tf.keras.layers.Dense(dff, activation='relu') for dff in dff_final]
+        self.pre_final_layers = [tf.keras.layers.Dense(dff, activation=activation) for dff in dff_final]
         self.final_layer = tf.keras.layers.Dense(num_outputs)
     
     def get_config(self):

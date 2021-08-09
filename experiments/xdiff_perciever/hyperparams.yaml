@@ -32,6 +32,7 @@ default: &default
     num_heads: 8
     dropout_rate: 0.0
     scale: 1.0
+    activation: 'softplus'
 
 
   metrics: 
@@ -60,7 +61,7 @@ default: &default
 
     learning_rate: &default-optimizer-learning_rate
       class: quantumflow.utils.WarmupExponentialDecay
-      initial_learning_rate: 0.0001
+      initial_learning_rate: 0.000025
       final_learning_rate: 0.0000000001
       decay_rate: 0.9
       decay_steps: 1000 # batches
@@ -94,3 +95,37 @@ default: &default
 
   save: True
 
+
+derivative: 
+  <<: *default
+  
+  dataset_train: &derivative-dataset_train
+    <<: *default-dataset_train
+    targets: 
+      - kinetic_energy
+      - kinetic_energy_density
+      - derivative
+      
+  dataset_validate:
+    <<: *derivative-dataset_train
+    run_name: validate_dataset
+
+  model:
+    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
+    base_model:
+      <<: *default-model
+      
+  metrics: 
+    kinetic_energy: mean_absolute_error
+    kinetic_energy_density: mean_absolute_error
+    derivative: mean_absolute_error
+
+  loss: 
+    kinetic_energy: mean_squared_error
+    kinetic_energy_density: mean_squared_error
+    derivative: mean_squared_error
+
+  loss_weights:
+    kinetic_energy: 0
+    kinetic_energy_density: 1.0
+    derivative: 1.0

@@ -90,7 +90,7 @@ default: &default
     write_graph: True
     write_images: True
     update_freq: epoch
-    profile_batch: 0
+    profile_batch: [10, 20]
 
   save: True
 
@@ -248,10 +248,6 @@ default_full: &default_full
 default_full_xdiff_fix:
   <<: *default_full
 
-    
-default_full_xdiff_fix_2:
-  <<: *default_full
-
 
 default_full_wide:
   <<: *default_full
@@ -267,3 +263,36 @@ default_full_wide:
       dff: 128
       dff_final: [128, 64]
       num_heads: 8
+      
+      
+default_full_batch:
+  <<: *default_full
+  
+  fit: 
+    <<: *default-fit
+    batch_size: 100
+    epochs: 100000
+    validation_freq: 10000  # epochs
+
+  tensorboard: 
+    <<: *default-tensorboard
+    histogram_freq: 10000 # epochs
+    metrics_freq: 100 # epochs
+
+
+default_full_lr:
+  <<: *default_full
+  
+  optimizer: 
+    <<: *default-optimizer
+
+    learning_rate: 
+      <<: *default-optimizer-learning_rate
+      initial_learning_rate: 0.00001
+      final_learning_rate: 0.0000000001
+      decay_rate: 0.9
+      decay_steps: 1000 # batches
+
+      cold_steps: 21800 # batches
+      warmup_steps: 0 # batches
+      cold_factor: 1.0

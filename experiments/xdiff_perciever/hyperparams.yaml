@@ -137,3 +137,12 @@ latents:
   model: 
     <<: *default-model
     latents_per_x: 4 
+    
+    
+debug:
+  <<: *default
+  model: 
+    <<: *default-model
+    num_heads: 16
+    latents_per_x: 1
+    

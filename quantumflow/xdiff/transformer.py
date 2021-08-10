@@ -284,13 +284,14 @@ class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
     
     
 class XdiffPerciever(tf.keras.layers.Layer):
-    def __init__(self, num_outputs, num_layers, num_repeats, d_model, num_heads, dff_input, dff, dff_final, share_weights=False, activation='relu', dropout_rate=0.1, scale=1.0):
+    def __init__(self, num_outputs, num_layers, num_repeats, latents_per_x, d_model, num_heads, dff_input, dff, dff_final, share_weights=False, activation='relu', dropout_rate=0.1, scale=1.0):
         super().__init__()
         self.num_outputs = num_outputs
         self.num_layers = num_layers
         self.num_repeats = num_repeats
         self.d_model = d_model
         self.num_heads = num_heads
+        self.latents_per_x = latents_per_x
         
         self.dff_input = dff_input
         self.dff = dff
@@ -303,7 +304,7 @@ class XdiffPerciever(tf.keras.layers.Layer):
         self.scale = scale
 
         self.input_layers = [tf.keras.layers.Dense(d_model, activation='softplus' if d == 0 else activation) for d, dff in enumerate(dff_input)]
-        self.x_token = self.add_weight(name='x_token', shape=(d_model,), dtype=tf.float32, trainable=True) # (d_model)
+        self.x_token = self.add_weight(name='x_token', shape=(latents_per_x, d_model), dtype=tf.float32, trainable=True) # (d_model)
         
         self.enc_layers = [[XdiffEncoderLayer(d_model, num_heads, dff, activation=activation, dropout_rate=dropout_rate) for _ in range(num_layers)] for _ in range(num_repeats+1)]
         self.cross_enc_layers = [XdiffCrossEncoderLayer(d_model, num_heads, dff, activation=activation, dropout_rate=dropout_rate) for _ in range(num_repeats)]
@@ -319,6 +320,7 @@ class XdiffPerciever(tf.keras.layers.Layer):
             "d_model": self.d_model,
             "num_heads": self.num_heads,
             "num_repeats": self.num_repeats,
+            "latents_per_x": self.latents_per_x,
             "dff_input": self.dff_input,
             "dff": self.dff,
             "dff_final": self.dff_final,
@@ -327,12 +329,14 @@ class XdiffPerciever(tf.keras.layers.Layer):
         }
     
     def call(self, x_outputs, x_inputs, inputs, training=False, mask=None):    
+        x_token = self.x_token # (d_model)
+        for shape in tf.unstack(tf.shape(x_outputs))[:-2]:
+            x_token = tf.repeat(tf.expand_dims(x_token, axis=-3), shape, axis=-3) # (..., latent_size, d_model)
+        x_token = tf.repeat(x_token, tf.shape(x_outputs)[-2], axis=0)
+        
+        x_outputs = tf.repeat(x_outputs, self.latents_per_x, axis=-2)
         xdiff = get_xdiff(x_outputs, x_outputs)/self.scale # (..., latent_size, latent_size)
         xdiff_cross = get_xdiff(x_outputs, x_inputs)/self.scale # (..., latent_size, input_size)
-        
-        x_token = self.x_token # (d_model)
-        for shape in tf.unstack(tf.shape(x_outputs))[:-1]:
-            x_token = tf.repeat(tf.expand_dims(x_token, axis=-2), shape, axis=-2) # (..., latent_size, d_model)
         
         for layer in self.input_layers:
             inputs = layer(inputs)

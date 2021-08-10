@@ -32,6 +32,7 @@ default: &default
     num_heads: 8
     dropout_rate: 0.0
     scale: 1.0
+    latents_per_x: 1
     activation: 'softplus'
 
 
@@ -129,3 +130,10 @@ derivative:
     kinetic_energy: 0
     kinetic_energy_density: 1.0
     derivative: 1.0
+
+
+latents:
+  <<: *default
+  model: 
+    <<: *default-model
+    latents_per_x: 4 

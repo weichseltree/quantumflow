@@ -136,7 +136,8 @@ latents:
   <<: *default
   model: 
     <<: *default-model
-    latents_per_x: 4 
+    num_heads: 16
+    latents_per_x: 16
     
     
 debug:

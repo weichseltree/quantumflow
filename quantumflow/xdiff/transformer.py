@@ -89,7 +89,7 @@ class XdiffMultiHeadAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, batch_sizes + [-1, self.num_heads, self.depth])
         return tf.transpose(x, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes), len(batch_sizes)+2])
 
-    def call(self, v, k, q, xdiff, mask=None):
+    def call(self, q, k, v, xdiff, mask=None):
         batch_sizes = tf.unstack(tf.shape(q)[:-2])
 
         q = self.wq(q)  # (..., size_q, d_model)
@@ -299,21 +299,23 @@ class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
         self.mha = XdiffMultiHeadAttention(d_model, num_heads)
         self.ffn = point_wise_feed_forward_network(d_model, dff, activation=activation)
 
-        self.layernorm1a = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm1b = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm1a = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
         self.dropout1 = tf.keras.layers.Dropout(dropout_rate)
         self.dropout2 = tf.keras.layers.Dropout(dropout_rate)
 
     def call(self, latents, inputs, xdiff_cross, training=False, mask=None):
-        inp = self.layernorm1a(inputs)
-        lat = self.layernorm1b(latents)
-        attn_output, _ = self.mha(inp, inp, lat, xdiff_cross, mask=mask)  # (..., latent_size, d_model)
+        
+        lat = self.layernorm1a(latents)
+        inp = inputs #self.layernorm1b(inputs)
+        
+        attn_output, _ = self.mha(lat, inp, inp, xdiff_cross, mask=mask)  # (..., latent_size, d_model)
 
         attn_output = self.dropout1(attn_output, training=training)
         #out1 = self.layernorm1(latents + attn_output)  # (..., latent_size, d_model)
-        out1 = latents + attn_output
+        out1 = latents + self.layernorm1b(attn_output)
 
         ffn_output = self.ffn(out1)  # (..., latent_size, d_model)
         ffn_output = self.dropout2(ffn_output, training=training)
@@ -423,5 +425,7 @@ class XdiffPerciever(tf.keras.layers.Layer):
             
         for layer in self.pre_final_layers:
             layers.append(layer)
+            
+        layers.append(self.final_layer)
         
         return latents, xdiff, inputs, xdiff_cross, layers

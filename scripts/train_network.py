@@ -64,7 +64,7 @@ def main(experiment, run_name):
 
     if params['save'] is True:
         save_model = getattr(model, params['save_model']) if not params.get('save_model', 'self') == 'self' else model
-        save_model.save(os.path.join(run_dir, 'saved_model'))
+        save_model.save(os.path.join(run_dir, 'saved_model'), include_optimizer=False)
 
         
 if __name__ == '__main__':

@@ -179,7 +179,7 @@ class XdiffEncoderLayer(tf.keras.layers.Layer):
     
 class XdiffTransformer(tf.keras.layers.Layer):
     def __init__(self, num_outputs, num_layers, d_model, num_heads, dff_input, dff, dff_final, 
-                 activation='gelu', kernel_stddev=0.02, dropout_rate=0.1, scale=1.0):
+                 activation='gelu', kernel_scale=None, dropout_rate=0.1, scale=1.0):
         super().__init__()
         self.num_outputs = num_outputs
         self.d_model = d_model
@@ -193,13 +193,17 @@ class XdiffTransformer(tf.keras.layers.Layer):
         
         self.scale = scale
         
-        kernel_initializer = tf.keras.initializers.TruncatedNormal(stddev=kernel_stddev)
+        if kernel_scale is None:
+            kernel_scale = 1/(2*num_layers)
+            
+        self.kernel_initializer = tf.keras.initializers.VarianceScaling(scale=kernel_scale, mode='fan_avg', distribution='uniform') # scaled Glorot uniform
 
         self.input_layers = [tf.keras.layers.Dense(d_model, activation='softplus' if d == 0 else activation) for d, dff in enumerate(dff_input)]
-        self.x_token = self.add_weight(name='x_token', shape=(d_model,), dtype=tf.float32, trainable=True, initializer=kernel_initializer) # (d_model)
+        self.x_token = self.add_weight(name='x_token', shape=(d_model,), dtype=tf.float32, trainable=True, 
+                                       initializer=tf.keras.initializers.RandomNormal(stddev=kernel_scale)) # (d_model)
     
         self.enc_layers = [XdiffEncoderLayer(d_model, num_heads, dff, activation=activation, 
-                                             dropout_rate=dropout_rate, kernel_initializer=kernel_initializer) for _ in range(num_layers)]
+                                             dropout_rate=dropout_rate, kernel_initializer=self.kernel_initializer) for _ in range(num_layers)]
 
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         
@@ -299,8 +303,10 @@ class TFWhileXdiffTransformer(XdiffTransformer):
 
     
 class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_cross, d_model, num_heads, dff, activation='gelu', dropout_rate=0.1, kernel_initializer=None):
+    def __init__(self, d_cross, d_model, num_heads, dff, dff_input, activation='gelu', dropout_rate=0.1, kernel_initializer=None):
         super().__init__()
+        
+        self.input_layers = [tf.keras.layers.Dense(dff_i, activation=activation) for d, dff_i in enumerate(dff_input)]
 
         self.mha = XdiffMultiHeadAttention(d_cross, d_model, num_heads, kernel_initializer=kernel_initializer)
         self.ffn = point_wise_feed_forward_network(d_model, dff, activation=activation, kernel_initializer=kernel_initializer)
@@ -314,8 +320,12 @@ class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
 
     def call(self, latents, inputs, xdiff_cross, training=False, mask=None):
         
+        inp = inputs
+        for layer in self.input_layers:
+            inp = layer(inp)
+        
         lat = self.layernorm1a(latents)
-        inp = self.layernorm1b(inputs)
+        inp = self.layernorm1b(inp)
         attn_output, _ = self.mha(lat, inp, inp, xdiff_cross, mask=mask)  # (..., latent_size, d_model)
         attn_output = self.dropout1(attn_output, training=training)
         
@@ -330,7 +340,7 @@ class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
     
 class XdiffPerciever(tf.keras.layers.Layer):
     def __init__(self, num_outputs, num_layers, num_repeats, latents_per_x, d_cross, d_model, num_heads, dff_input, dff, dff_final, share_weights=False, 
-                 activation='gelu', kernel_stddev=0.02, dropout_rate=0.1, scale=1.0):
+                 activation='gelu', kernel_scale=None, dropout_rate=0.1, scale=1.0):
         super().__init__()
         self.num_outputs = num_outputs
         self.num_layers = num_layers
@@ -350,15 +360,18 @@ class XdiffPerciever(tf.keras.layers.Layer):
         
         self.scale = scale
         
-        kernel_initializer = tf.keras.initializers.TruncatedNormal(stddev=kernel_stddev)
+        if kernel_scale is None:
+            kernel_scale = 1/np.sqrt(num_layers*num_repeats+num_layers+num_repeats)
+        
+        self.kernel_initializer = tf.keras.initializers.VarianceScaling(scale=kernel_scale, mode='fan_avg', distribution='uniform') # scaled Glorot uniform
 
-        self.input_layers = [tf.keras.layers.Dense(d_model, activation=activation if d == 0 else activation) for d, dff in enumerate(dff_input)]
-        self.x_token = self.add_weight(name='x_token', shape=(latents_per_x, d_model), dtype=tf.float32, trainable=True, initializer=kernel_initializer) # (d_model)
+        self.x_token = self.add_weight(name='x_token', shape=(latents_per_x, d_model), dtype=tf.float32, trainable=True, 
+                                       initializer=tf.keras.initializers.RandomNormal(stddev=kernel_scale)) # (d_model)
         
         self.enc_layers = [[XdiffEncoderLayer(d_model, num_heads, dff, activation=activation, 
-                                              dropout_rate=dropout_rate, kernel_initializer=kernel_initializer) for _ in range(num_layers)] for _ in range(num_repeats+1)]
-        self.cross_enc_layers = [XdiffCrossEncoderLayer(d_cross, d_model, num_heads, dff, activation=activation, 
-                                                        dropout_rate=dropout_rate, kernel_initializer=kernel_initializer) for _ in range(num_repeats)]
+                                              dropout_rate=dropout_rate, kernel_initializer=self.kernel_initializer) for _ in range(num_layers)] for _ in range(num_repeats+1)]
+        self.cross_enc_layers = [XdiffCrossEncoderLayer(d_cross, d_model, num_heads, dff, dff_input, activation=activation, 
+                                                        dropout_rate=dropout_rate, kernel_initializer=self.kernel_initializer) for _ in range(num_repeats)]
 
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         
@@ -391,9 +404,6 @@ class XdiffPerciever(tf.keras.layers.Layer):
         x_outputs = tf.repeat(x_outputs, self.latents_per_x, axis=-2)
         xdiff = get_xdiff(x_outputs, x_outputs)/self.scale # (..., latent_size, latent_size)
         xdiff_cross = get_xdiff(x_outputs, x_inputs)/self.scale # (..., latent_size, input_size)
-        
-        for layer in self.input_layers:
-            inputs = layer(inputs)
             
         latents = x_token
         
@@ -423,9 +433,6 @@ class XdiffPerciever(tf.keras.layers.Layer):
         x_outputs = tf.repeat(x_outputs, self.latents_per_x, axis=-2)
         xdiff = get_xdiff(x_outputs, x_outputs)/self.scale # (..., latent_size, latent_size)
         xdiff_cross = get_xdiff(x_outputs, x_inputs)/self.scale # (..., latent_size, input_size)
-        
-        for layer in self.input_layers:
-            inputs = layer(inputs)
             
         latents = x_token
         

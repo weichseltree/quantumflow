@@ -157,3 +157,10 @@ debug_scaled:
     dff_input: []
   
   
+debug_input:
+  <<: *default
+  model: 
+    <<: *default-model
+    num_heads: 16
+  
+  

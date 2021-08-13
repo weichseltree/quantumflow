@@ -124,7 +124,7 @@ class XdiffMultiHeadAttention(tf.keras.layers.Layer):
         
         xdiff = tf.expand_dims(xdiff, axis=-3) # (..., num_heads, size_q, size_k)
         
-        initial_attention_logits = 0.1*(tf.expand_dims(a, axis=-1)*xdiff \
+        initial_attention_logits = (tf.expand_dims(a, axis=-1)*xdiff \
                                    - 0.5*tf.abs(tf.expand_dims(b, axis=-1)) * xdiff**2 \
                                    + tf.expand_dims(c, axis=-1) * tf.sin(np.pi*xdiff) \
                                    + tf.expand_dims(d, axis=-1) * tf.cos(np.pi*xdiff) \
@@ -162,20 +162,18 @@ class XdiffEncoderLayer(tf.keras.layers.Layer):
         self.dropout1 = tf.keras.layers.Dropout(dropout_rate)
         self.dropout2 = tf.keras.layers.Dropout(dropout_rate)
 
-    def call(self, inputs, xdiff, training=False, mask=None):
-        inp = self.layernorm1(inputs)  # (..., input_size, d_model)
-
-        attn_output, _ = self.mha(inp, inp, inp, xdiff, mask=mask)  # (..., input_size, d_model)
-        
+    def call(self, latents, xdiff, training=False, mask=None):
+        lat = self.layernorm1(latents)  # (..., input_size, d_model)
+        attn_output, _ = self.mha(lat, lat, lat, xdiff, mask=mask)  # (..., input_size, d_model)
         attn_output = self.dropout1(attn_output, training=training)
-        #out1 = self.layernorm1(inputs + attn_output)  # (..., input_size, d_model)
-        out1 = inputs + attn_output
-
-        ffn_output = self.ffn(out1)  # (..., input_size, d_model)
+        
+        latents = latents + attn_output
+        
+        lat = self.layernorm2(latents)
+        ffn_output = self.ffn(lat)  # (..., input_size, d_model)
         ffn_output = self.dropout2(ffn_output, training=training)
-        out2 = self.layernorm2(out1 + ffn_output)  # (..., input_size, d_model)
 
-        return out2
+        return latents + ffn_output  # (..., input_size, d_model)
 
     
 class XdiffTransformer(tf.keras.layers.Layer):
@@ -198,6 +196,8 @@ class XdiffTransformer(tf.keras.layers.Layer):
     
         self.enc_layers = [XdiffEncoderLayer(d_model, num_heads, dff, activation=activation, dropout_rate=dropout_rate) for _ in range(num_layers)]
 
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        
         self.pre_final_layers = [tf.keras.layers.Dense(dff, activation=activation) for dff in dff_final]
         self.final_layer = tf.keras.layers.Dense(num_outputs)
     
@@ -224,21 +224,22 @@ class XdiffTransformer(tf.keras.layers.Layer):
             x_token = tf.repeat(tf.expand_dims(x_token, axis=-2), shape, axis=-2)
         x_token = tf.expand_dims(x_token, axis=-2) # (..., 1, d_model)
         
-        value = inputs
+        latents = inputs
         for layer in self.input_layers:
-            value = layer(value)
+            latents = layer(latents)
             
-        value = tf.concat([x_token, value], axis=-2)
+        latents = tf.concat([x_token, latents], axis=-2)
         
         for i in range(self.num_layers):
-            value = self.enc_layers[i](value, xdiff, training=training, mask=mask)
-
-        value = value[..., 0, :]
+            latents = self.enc_layers[i](latents, xdiff, training=training, mask=mask)
+        
+        latents = self.layernorm(latents)
+        latents = latents[..., 0, :]
         
         for layer in self.pre_final_layers:
-            value = layer(value)
+            latents = layer(latents)
         
-        outputs = self.final_layer(value)
+        outputs = self.final_layer(latents)
         
         return outputs # (..., num_outputs)
 
@@ -309,19 +310,17 @@ class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
     def call(self, latents, inputs, xdiff_cross, training=False, mask=None):
         
         lat = self.layernorm1a(latents)
-        inp = inputs #self.layernorm1b(inputs)
-        
+        inp = self.layernorm1b(inputs)
         attn_output, _ = self.mha(lat, inp, inp, xdiff_cross, mask=mask)  # (..., latent_size, d_model)
-
         attn_output = self.dropout1(attn_output, training=training)
-        #out1 = self.layernorm1(latents + attn_output)  # (..., latent_size, d_model)
-        out1 = latents + self.layernorm1b(attn_output)
+        
+        latents = latents + attn_output
 
-        ffn_output = self.ffn(out1)  # (..., latent_size, d_model)
+        lat = self.layernorm2(latents)
+        ffn_output = self.ffn(lat)  # (..., latent_size, d_model)
         ffn_output = self.dropout2(ffn_output, training=training)
-        out2 = self.layernorm2(out1 + ffn_output)  # (..., latent_size, d_model)
 
-        return out2
+        return latents + ffn_output  # (..., latent_size, d_model)
     
     
 class XdiffPerciever(tf.keras.layers.Layer):
@@ -350,6 +349,8 @@ class XdiffPerciever(tf.keras.layers.Layer):
         self.enc_layers = [[XdiffEncoderLayer(d_model, num_heads, dff, activation=activation, dropout_rate=dropout_rate) for _ in range(num_layers)] for _ in range(num_repeats+1)]
         self.cross_enc_layers = [XdiffCrossEncoderLayer(d_model, num_heads, dff, activation=activation, dropout_rate=dropout_rate) for _ in range(num_repeats)]
 
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        
         self.pre_final_layers = [tf.keras.layers.Dense(dff, activation=activation) for dff in dff_final]
         self.final_layer = tf.keras.layers.Dense(num_outputs)
     
@@ -392,6 +393,8 @@ class XdiffPerciever(tf.keras.layers.Layer):
         for i in range(self.num_layers):
             latents = self.enc_layers[self.num_repeats][i](latents, xdiff, training=training, mask=None)
             
+        latents = self.layernorm(latents)
+        
         for layer in self.pre_final_layers:
             latents = layer(latents)
         
@@ -423,6 +426,8 @@ class XdiffPerciever(tf.keras.layers.Layer):
         for i in range(self.num_layers):
             layers.append(self.enc_layers[self.num_repeats][i])
             
+        layers.append(self.layernorm)
+        
         for layer in self.pre_final_layers:
             layers.append(layer)
             

@@ -8,10 +8,10 @@ def get_xdiff(x1, x2):
     xdiff = tf.expand_dims(x1, axis=-2) - tf.expand_dims(x2, axis=-3)
     return tf.sqrt(tf.reduce_sum(tf.square(xdiff), axis=-1)) # (..., seq_len, seq_len)
 
-def point_wise_feed_forward_network(d_model, dff, activation='gelu'):
+def point_wise_feed_forward_network(d_model, dff, activation='gelu', kernel_initializer=None):
     return tf.keras.Sequential([
-        tf.keras.layers.Dense(dff, activation=activation),  # (..., seq_len, dff)
-        tf.keras.layers.Dense(d_model)  # (..., seq_len, d_model)
+        tf.keras.layers.Dense(dff, activation=activation, kernel_initializer=kernel_initializer),  # (..., seq_len, dff)
+        tf.keras.layers.Dense(d_model, kernel_initializer=kernel_initializer)  # (..., seq_len, d_model)
     ])
 
 def scaled_dot_product_attention(q, k, v, initial_attention_logits=None, mask=None):
@@ -56,7 +56,7 @@ def scaled_dot_product_attention(q, k, v, initial_attention_logits=None, mask=No
 
 
 class XdiffMultiHeadAttention(tf.keras.layers.Layer):
-    def __init__(self, d_attn, d_model, num_heads):
+    def __init__(self, d_attn, d_model, num_heads, kernel_initializer=None):
         super().__init__()
         self.num_heads = num_heads
         self.d_attn = d_attn
@@ -66,9 +66,9 @@ class XdiffMultiHeadAttention(tf.keras.layers.Layer):
 
         self.depth = d_attn // self.num_heads
 
-        self.wq = tf.keras.layers.Dense(d_attn, name='q')
-        self.wk = tf.keras.layers.Dense(d_attn, name='k')
-        self.wv = tf.keras.layers.Dense(d_attn, name='v')
+        self.wq = tf.keras.layers.Dense(d_attn, name='q', kernel_initializer=kernel_initializer)
+        self.wk = tf.keras.layers.Dense(d_attn, name='k', kernel_initializer=kernel_initializer)
+        self.wv = tf.keras.layers.Dense(d_attn, name='v', kernel_initializer=kernel_initializer)
         
         self.wa = tf.keras.layers.Dense(self.num_heads, name='a')
         self.wb = tf.keras.layers.Dense(self.num_heads, name='b')
@@ -81,7 +81,7 @@ class XdiffMultiHeadAttention(tf.keras.layers.Layer):
         self.wi = tf.keras.layers.Dense(self.num_heads, name='i')
         self.wj = tf.keras.layers.Dense(self.num_heads, name='j')
         
-        self.dense = tf.keras.layers.Dense(d_model)
+        self.dense = tf.keras.layers.Dense(d_model, kernel_initializer=kernel_initializer)
 
     def split_heads(self, x, batch_sizes):
         """Split the last dimension into (num_heads, depth).
@@ -151,11 +151,11 @@ class XdiffMultiHeadAttention(tf.keras.layers.Layer):
 
     
 class XdiffEncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, activation='gelu', dropout_rate=0.1):
+    def __init__(self, d_model, num_heads, dff, activation='gelu', dropout_rate=0.1, kernel_initializer=None):
         super().__init__()
 
-        self.mha = XdiffMultiHeadAttention(d_model, d_model, num_heads)
-        self.ffn = point_wise_feed_forward_network(d_model, dff, activation=activation)
+        self.mha = XdiffMultiHeadAttention(d_model, d_model, num_heads, kernel_initializer=kernel_initializer)
+        self.ffn = point_wise_feed_forward_network(d_model, dff, activation=activation, kernel_initializer=kernel_initializer)
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -178,7 +178,8 @@ class XdiffEncoderLayer(tf.keras.layers.Layer):
 
     
 class XdiffTransformer(tf.keras.layers.Layer):
-    def __init__(self, num_outputs, num_layers, d_model, num_heads, dff_input, dff, dff_final, activation='gelu', dropout_rate=0.1, scale=1.0):
+    def __init__(self, num_outputs, num_layers, d_model, num_heads, dff_input, dff, dff_final, 
+                 activation='gelu', kernel_stddev=0.02, dropout_rate=0.1, scale=1.0):
         super().__init__()
         self.num_outputs = num_outputs
         self.d_model = d_model
@@ -191,12 +192,14 @@ class XdiffTransformer(tf.keras.layers.Layer):
         self.activation = activation
         
         self.scale = scale
+        
+        kernel_initializer = tf.keras.initializers.TruncatedNormal(stddev=kernel_stddev)
 
         self.input_layers = [tf.keras.layers.Dense(d_model, activation='softplus' if d == 0 else activation) for d, dff in enumerate(dff_input)]
-        self.x_token = self.add_weight(name='x_token', shape=(d_model,), dtype=tf.float32, trainable=True) # (d_model)
-        # TODO: mean 0, standard deviation 0.02, and truncation bounds [-2, 2].
+        self.x_token = self.add_weight(name='x_token', shape=(d_model,), dtype=tf.float32, trainable=True, initializer=kernel_initializer) # (d_model)
     
-        self.enc_layers = [XdiffEncoderLayer(d_model, num_heads, dff, activation=activation, dropout_rate=dropout_rate) for _ in range(num_layers)]
+        self.enc_layers = [XdiffEncoderLayer(d_model, num_heads, dff, activation=activation, 
+                                             dropout_rate=dropout_rate, kernel_initializer=kernel_initializer) for _ in range(num_layers)]
 
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         
@@ -296,11 +299,11 @@ class TFWhileXdiffTransformer(XdiffTransformer):
 
     
 class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_cross, d_model, num_heads, dff, activation='gelu', dropout_rate=0.1):
+    def __init__(self, d_cross, d_model, num_heads, dff, activation='gelu', dropout_rate=0.1, kernel_initializer=None):
         super().__init__()
 
-        self.mha = XdiffMultiHeadAttention(d_cross, d_model, num_heads)
-        self.ffn = point_wise_feed_forward_network(d_model, dff, activation=activation)
+        self.mha = XdiffMultiHeadAttention(d_cross, d_model, num_heads, kernel_initializer=kernel_initializer)
+        self.ffn = point_wise_feed_forward_network(d_model, dff, activation=activation, kernel_initializer=kernel_initializer)
 
         self.layernorm1b = tf.keras.layers.LayerNormalization(epsilon=1e-4)
         self.layernorm1a = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -326,7 +329,8 @@ class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
     
     
 class XdiffPerciever(tf.keras.layers.Layer):
-    def __init__(self, num_outputs, num_layers, num_repeats, latents_per_x, d_cross, d_model, num_heads, dff_input, dff, dff_final, share_weights=False, activation='gelu', dropout_rate=0.1, scale=1.0):
+    def __init__(self, num_outputs, num_layers, num_repeats, latents_per_x, d_cross, d_model, num_heads, dff_input, dff, dff_final, share_weights=False, 
+                 activation='gelu', kernel_stddev=0.02, dropout_rate=0.1, scale=1.0):
         super().__init__()
         self.num_outputs = num_outputs
         self.num_layers = num_layers
@@ -345,13 +349,16 @@ class XdiffPerciever(tf.keras.layers.Layer):
         self.activation = activation
         
         self.scale = scale
+        
+        kernel_initializer = tf.keras.initializers.TruncatedNormal(stddev=kernel_stddev)
 
         self.input_layers = [tf.keras.layers.Dense(d_model, activation=activation if d == 0 else activation) for d, dff in enumerate(dff_input)]
-        self.x_token = self.add_weight(name='x_token', shape=(latents_per_x, d_model), dtype=tf.float32, trainable=True) # (d_model)
-        # TODO: mean 0, standard deviation 0.02, and truncation bounds [-2, 2].
+        self.x_token = self.add_weight(name='x_token', shape=(latents_per_x, d_model), dtype=tf.float32, trainable=True, initializer=kernel_initializer) # (d_model)
         
-        self.enc_layers = [[XdiffEncoderLayer(d_model, num_heads, dff, activation=activation, dropout_rate=dropout_rate) for _ in range(num_layers)] for _ in range(num_repeats+1)]
-        self.cross_enc_layers = [XdiffCrossEncoderLayer(d_cross, d_model, num_heads, dff, activation=activation, dropout_rate=dropout_rate) for _ in range(num_repeats)]
+        self.enc_layers = [[XdiffEncoderLayer(d_model, num_heads, dff, activation=activation, 
+                                              dropout_rate=dropout_rate, kernel_initializer=kernel_initializer) for _ in range(num_layers)] for _ in range(num_repeats+1)]
+        self.cross_enc_layers = [XdiffCrossEncoderLayer(d_cross, d_model, num_heads, dff, activation=activation, 
+                                                        dropout_rate=dropout_rate, kernel_initializer=kernel_initializer) for _ in range(num_repeats)]
 
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         

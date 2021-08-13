@@ -34,6 +34,7 @@ default: &default
     num_heads: 8
     dropout_rate: 0.0
     scale: 1.0
+    kernel_stddev: 0.02
     latents_per_x: 1
 
 
@@ -170,6 +171,16 @@ debug_new:
     <<: *default-model
     num_heads: 16
     d_cross: 32
-    num_layers: 0
+    num_layers: 1
+    kernel_stddev: 0.02
   
+  
+debug_kernel:
+  <<: *default
+  model: 
+    <<: *default-model
+    num_heads: 16
+    d_cross: 32
+    num_layers: 1
+    kernel_stddev: 0.02
   

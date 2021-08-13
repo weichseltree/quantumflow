@@ -188,5 +188,5 @@ debug_kernel_fix:
     <<: *default-model
     num_heads: 16
     d_cross: 32
-    num_layers: 1
+    num_layers: 0
   

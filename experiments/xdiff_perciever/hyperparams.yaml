@@ -27,6 +27,7 @@ default: &default
     num_layers: 1
     num_repeats: 8
     d_model: 64
+    d_cross: 64
     dff_input: [64, 128]
     dff: 128
     dff_final: [128, 64]
@@ -34,7 +35,6 @@ default: &default
     dropout_rate: 0.0
     scale: 1.0
     latents_per_x: 1
-    activation: 'softplus'
 
 
   metrics: 
@@ -162,5 +162,14 @@ debug_input:
   model: 
     <<: *default-model
     num_heads: 16
+  
+  
+debug_new:
+  <<: *default
+  model: 
+    <<: *default-model
+    num_heads: 16
+    d_cross: 32
+    num_layers: 0
   
   

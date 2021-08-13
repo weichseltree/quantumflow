@@ -190,3 +190,22 @@ debug_kernel_fix:
     d_cross: 32
     num_layers: 0
   
+debug_x:
+  <<: *default
+  model: 
+    <<: *default-model
+    num_repeats: 16
+    num_layers: 0
+    
+    d_model: 64
+    d_cross: 32
+    num_heads: 8
+    
+    dff_input: [64]
+    dff: 64
+    dff_final: [64]
+    
+    dropout_rate: 0.0
+    scale: 1.0
+    latents_per_x: 1
+    

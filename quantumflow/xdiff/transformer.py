@@ -6,13 +6,39 @@ import numpy as np
 
 def get_xdiff(x1, x2):
     xdiff = tf.expand_dims(x1, axis=-2) - tf.expand_dims(x2, axis=-3)
-    return tf.sqrt(tf.reduce_sum(tf.square(xdiff), axis=-1)) # (..., seq_len, seq_len)
+    xdiff =  tf.sqrt(tf.reduce_sum(tf.square(xdiff), axis=-1)) # (..., seq_len, seq_len)
+    
+    xdiff = tf.stack([
+        xdiff, 
+        xdiff**2,
+        tf.sin(np.pi*xdiff),
+        tf.cos(np.pi*xdiff),
+        tf.sin(np.pi*2*xdiff),
+        tf.cos(np.pi*2*xdiff),
+        tf.sin(np.pi*3*xdiff),
+        tf.cos(np.pi*3*xdiff),
+        tf.sin(np.pi*4*xdiff),
+        tf.cos(np.pi*4*xdiff),
+        tf.sin(np.pi*5*xdiff),
+        tf.cos(np.pi*5*xdiff),
+        tf.sin(np.pi*6*xdiff),
+        tf.cos(np.pi*6*xdiff),
+        tf.sin(np.pi*7*xdiff),
+        tf.cos(np.pi*7*xdiff),
+        tf.sin(np.pi*8*xdiff),
+        tf.cos(np.pi*8*xdiff),
+        tf.sin(np.pi*9*xdiff),
+        tf.cos(np.pi*9*xdiff),
+        tf.sin(np.pi*10*xdiff),
+        tf.cos(np.pi*10*xdiff),
+        tf.sin(np.pi*11*xdiff),
+        tf.cos(np.pi*11*xdiff),
+        tf.sin(np.pi*12*xdiff),
+        tf.cos(np.pi*12*xdiff),
+    ], axis=-1) # (..., latent_size, latent_size, x_features)
+    return xdiff
+        
 
-def point_wise_feed_forward_network(d_model, dff, activation='gelu', kernel_initializer=None):
-    return tf.keras.Sequential([
-        tf.keras.layers.Dense(dff, activation=activation, kernel_initializer=kernel_initializer),  # (..., seq_len, dff)
-        tf.keras.layers.Dense(d_model, kernel_initializer=kernel_initializer)  # (..., seq_len, d_model)
-    ])
 
 def scaled_dot_product_attention(q, k, v, initial_attention_logits=None, mask=None):
     """Calculate the attention weights.
@@ -33,14 +59,13 @@ def scaled_dot_product_attention(q, k, v, initial_attention_logits=None, mask=No
     """
 
     matmul_qk = tf.matmul(q, k, transpose_b=True)  # (..., size_q, size_k)
-    
-    if initial_attention_logits is not None:
-        matmul_qk += initial_attention_logits
         
     # scale matmul_qk
     dk = tf.cast(tf.shape(k)[-1], tf.float32)
     scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
 
+    if initial_attention_logits is not None:
+        scaled_attention_logits += initial_attention_logits
         
     # add the mask to the scaled tensor.
     if mask is not None:
@@ -66,22 +91,12 @@ class XdiffMultiHeadAttention(tf.keras.layers.Layer):
 
         self.depth = d_attn // self.num_heads
 
-        self.wq = tf.keras.layers.Dense(d_attn, name='q', kernel_initializer=kernel_initializer)
-        self.wk = tf.keras.layers.Dense(d_attn, name='k', kernel_initializer=kernel_initializer)
+        self.wq = tf.keras.layers.Dense(d_attn, name='q')
+        self.wk = tf.keras.layers.Dense(d_attn, name='k')
         self.wv = tf.keras.layers.Dense(d_attn, name='v', kernel_initializer=kernel_initializer)
+        self.wx = tf.keras.layers.Dense(self.num_heads, name='x')
         
-        self.wa = tf.keras.layers.Dense(self.num_heads, name='a')
-        self.wb = tf.keras.layers.Dense(self.num_heads, name='b')
-        self.wc = tf.keras.layers.Dense(self.num_heads, name='c')
-        self.wd = tf.keras.layers.Dense(self.num_heads, name='d')
-        self.we = tf.keras.layers.Dense(self.num_heads, name='e')
-        self.wf = tf.keras.layers.Dense(self.num_heads, name='f')
-        self.wg = tf.keras.layers.Dense(self.num_heads, name='g')
-        self.wh = tf.keras.layers.Dense(self.num_heads, name='h')
-        self.wi = tf.keras.layers.Dense(self.num_heads, name='i')
-        self.wj = tf.keras.layers.Dense(self.num_heads, name='j')
-        
-        self.dense = tf.keras.layers.Dense(d_model, kernel_initializer=kernel_initializer)
+        self.dense = tf.keras.layers.Dense(d_model, kernel_initializer=kernel_initializer, name='linear')
 
     def split_heads(self, x, batch_sizes):
         """Split the last dimension into (num_heads, depth).
@@ -96,49 +111,21 @@ class XdiffMultiHeadAttention(tf.keras.layers.Layer):
         q = self.wq(q)  # (..., size_q, d_attn)
         k = self.wk(k)  # (..., size_k, d_attn)
         v = self.wv(v)  # (..., size_v, d_attn)
+        x = self.wx(xdiff) # (..., size_q, size_v, num_heads)
         
-        a = self.wa(q)  # (..., size_q, num_heads)
-        b = self.wb(q)  # (..., size_q, num_heads)
-        c = self.wc(q)  # (..., size_q, num_heads)
-        d = self.wd(q)  # (..., size_q, num_heads)
-        e = self.we(q)  # (..., size_q, num_heads)
-        f = self.wf(q)  # (..., size_q, num_heads)
-        g = self.wg(q)  # (..., size_q, num_heads)
-        h = self.wh(q)  # (..., size_q, num_heads)
-        i = self.wi(q)  # (..., size_q, num_heads)
-        j = self.wj(q)  # (..., size_q, num_heads)
+        #a = self.wa(q)  # (..., size_q, num_heads)
         
         q = self.split_heads(q, batch_sizes)  # (..., num_heads, size_q, depth)
         k = self.split_heads(k, batch_sizes)  # (..., num_heads, size_k, depth)
         v = self.split_heads(v, batch_sizes)  # (..., num_heads, size_v, depth)
+        x = tf.transpose(x, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+2, len(batch_sizes), len(batch_sizes)+1])  # (..., num_heads, size_q, size_v)
         
-        a = tf.transpose(a, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes)])  # (..., num_heads, size_q)
-        b = tf.transpose(b, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes)])  # (..., num_heads, size_q)
-        c = tf.transpose(c, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes)])  # (..., num_heads, size_q)
-        d = tf.transpose(d, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes)])  # (..., num_heads, size_q)
-        e = tf.transpose(e, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes)])  # (..., num_heads, size_q)
-        f = tf.transpose(f, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes)])  # (..., num_heads, size_q)
-        g = tf.transpose(g, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes)])  # (..., num_heads, size_q)
-        h = tf.transpose(h, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes)])  # (..., num_heads, size_q)
-        i = tf.transpose(i, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes)])  # (..., num_heads, size_q)
-        j = tf.transpose(j, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes)])  # (..., num_heads, size_q)
+        dkx = tf.cast(tf.shape(xdiff)[-1], tf.float32)
+        scaled_x_logits = x / tf.math.sqrt(dkx)
         
-        xdiff = tf.expand_dims(xdiff, axis=-3) # (..., num_heads, size_q, size_k)
-        
-        initial_attention_logits = (tf.expand_dims(a, axis=-1)*xdiff \
-                                   - 0.5*tf.abs(tf.expand_dims(b, axis=-1)) * xdiff**2 \
-                                   + tf.expand_dims(c, axis=-1) * tf.sin(np.pi*xdiff) \
-                                   + tf.expand_dims(d, axis=-1) * tf.cos(np.pi*xdiff) \
-                                   + tf.expand_dims(e, axis=-1) * tf.sin(np.pi*3*xdiff) \
-                                   + tf.expand_dims(f, axis=-1) * tf.cos(np.pi*3*xdiff) \
-                                   + tf.expand_dims(g, axis=-1) * tf.sin(np.pi*5*xdiff) \
-                                   + tf.expand_dims(h, axis=-1) * tf.cos(np.pi*5*xdiff) \
-                                   + tf.expand_dims(i, axis=-1) * tf.sin(np.pi*9*xdiff) \
-                                   + tf.expand_dims(j, axis=-1) * tf.cos(np.pi*9*xdiff))
-         
         # scaled_attention.shape == (..., num_heads, size_q, depth)
         # attention_weights.shape == (..., num_heads, size_q, size_k)
-        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, initial_attention_logits, mask=mask)
+        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, scaled_x_logits, mask=mask)
 
         scaled_attention = tf.transpose(scaled_attention, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+1, len(batch_sizes), len(batch_sizes)+2])  
         # (..., size_q, num_heads, depth)
@@ -155,10 +142,14 @@ class XdiffEncoderLayer(tf.keras.layers.Layer):
         super().__init__()
 
         self.mha = XdiffMultiHeadAttention(d_model, d_model, num_heads, kernel_initializer=kernel_initializer)
-        self.ffn = point_wise_feed_forward_network(d_model, dff, activation=activation, kernel_initializer=kernel_initializer)
+        
+        self.ffn = [
+            tf.keras.layers.Dense(dff, activation=activation, kernel_initializer=kernel_initializer),  # (..., seq_len, dff)
+            tf.keras.layers.Dense(d_model, kernel_initializer=kernel_initializer)  # (..., seq_len, d_model)
+        ]
 
-        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='latents_layernorm')
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='ffn_layernorm')
 
         self.dropout1 = tf.keras.layers.Dropout(dropout_rate)
         self.dropout2 = tf.keras.layers.Dropout(dropout_rate)
@@ -171,7 +162,7 @@ class XdiffEncoderLayer(tf.keras.layers.Layer):
         latents = latents + attn_output
         
         lat = self.layernorm2(latents)
-        ffn_output = self.ffn(lat)  # (..., input_size, d_model)
+        ffn_output = self.ffn[1](self.ffn[0](lat))  # (..., input_size, d_model)
         ffn_output = self.dropout2(ffn_output, training=training)
 
         return latents + ffn_output  # (..., input_size, d_model)
@@ -205,10 +196,10 @@ class XdiffTransformer(tf.keras.layers.Layer):
         self.enc_layers = [XdiffEncoderLayer(d_model, num_heads, dff, activation=activation, 
                                              dropout_rate=dropout_rate, kernel_initializer=self.kernel_initializer) for _ in range(num_layers)]
 
-        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='final_layernorm')
         
-        self.pre_final_layers = [tf.keras.layers.Dense(dff, activation=activation) for dff in dff_final]
-        self.final_layer = tf.keras.layers.Dense(num_outputs)
+        self.pre_final_layers = [tf.keras.layers.Dense(dff, activation=activation, name=f'output_ffn_{d}') for d, dff in enumerate(dff_final)]
+        self.final_layer = tf.keras.layers.Dense(num_outputs, name=f'output_dense_layer')
     
     def get_config(self):
         return {
@@ -306,14 +297,18 @@ class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_cross, d_model, num_heads, dff, dff_input, activation='gelu', dropout_rate=0.1, kernel_initializer=None):
         super().__init__()
         
-        self.input_layers = [tf.keras.layers.Dense(dff_i, activation=activation) for d, dff_i in enumerate(dff_input)]
+        self.input_layers = [tf.keras.layers.Dense(dff_i, activation=activation, name=f'inputs_ffn_{d}') for d, dff_i in enumerate(dff_input)]
 
         self.mha = XdiffMultiHeadAttention(d_cross, d_model, num_heads, kernel_initializer=kernel_initializer)
-        self.ffn = point_wise_feed_forward_network(d_model, dff, activation=activation, kernel_initializer=kernel_initializer)
-
-        self.layernorm1b = tf.keras.layers.LayerNormalization(epsilon=1e-4)
-        self.layernorm1a = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        
+        self.ffn = [
+            tf.keras.layers.Dense(dff, activation=activation, kernel_initializer=kernel_initializer, name='ffn_0'),  # (..., seq_len, dff)
+            tf.keras.layers.Dense(d_model, kernel_initializer=kernel_initializer, name='ffn_1')  # (..., seq_len, d_model)
+        ]
+        
+        self.layernorm1a = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='latents_layernorm')
+        self.layernorm1b = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='inputs_layernorm')
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='ffn_layernorm')
 
         self.dropout1 = tf.keras.layers.Dropout(dropout_rate)
         self.dropout2 = tf.keras.layers.Dropout(dropout_rate)
@@ -332,7 +327,7 @@ class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
         latents = latents + attn_output
 
         lat = self.layernorm2(latents)
-        ffn_output = self.ffn(lat)  # (..., latent_size, d_model)
+        ffn_output = self.ffn[1](self.ffn[0](lat))  # (..., input_size, d_model)
         ffn_output = self.dropout2(ffn_output, training=training)
 
         return latents + ffn_output  # (..., latent_size, d_model)
@@ -373,10 +368,10 @@ class XdiffPerciever(tf.keras.layers.Layer):
         self.cross_enc_layers = [XdiffCrossEncoderLayer(d_cross, d_model, num_heads, dff, dff_input, activation=activation, 
                                                         dropout_rate=dropout_rate, kernel_initializer=self.kernel_initializer) for _ in range(num_repeats)]
 
-        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='final_layernorm')
         
-        self.pre_final_layers = [tf.keras.layers.Dense(dff, activation=activation) for dff in dff_final]
-        self.final_layer = tf.keras.layers.Dense(num_outputs)
+        self.pre_final_layers = [tf.keras.layers.Dense(dff, activation=activation, name=f'output_ffn_{d}') for d, dff in enumerate(dff_final)]
+        self.final_layer = tf.keras.layers.Dense(num_outputs, name=f'output_dense_layer')
     
     def get_config(self):
         return {
@@ -402,9 +397,9 @@ class XdiffPerciever(tf.keras.layers.Layer):
         x_token = tf.repeat(x_token, tf.shape(x_outputs)[-2], axis=0)
         
         x_outputs = tf.repeat(x_outputs, self.latents_per_x, axis=-2)
-        xdiff = get_xdiff(x_outputs, x_outputs)/self.scale # (..., latent_size, latent_size)
-        xdiff_cross = get_xdiff(x_outputs, x_inputs)/self.scale # (..., latent_size, input_size)
-            
+        xdiff = get_xdiff(x_outputs, x_outputs)/self.scale # (..., latent_size, latent_size, x_features)
+        xdiff_cross = get_xdiff(x_outputs, x_inputs)/self.scale # (..., latent_size, input_size, x_features)
+        
         latents = x_token
         
         for r in range(self.num_repeats):

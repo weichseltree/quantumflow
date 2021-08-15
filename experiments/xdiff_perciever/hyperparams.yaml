@@ -221,7 +221,7 @@ debug_x_new:
     
 debug_x_slim:
   <<: *default
-  model: 
+  model: &debug_x_slim-model
     <<: *default-model
     num_repeats: 8
     num_layers: 0
@@ -239,7 +239,7 @@ debug_x_slim:
     latents_per_x: 1
 
 
-debug_x_deriv:
+debug_x_slim_deriv:
   <<: *default
  
   dataset_train: &debug_x_deriv-dataset_train
@@ -256,10 +256,7 @@ debug_x_deriv:
   model:
     class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
     base_model:
-      <<: *default-model
-      num_heads: 16
-      d_cross: 32
-      num_layers: 0
+      <<: *debug_x_slim-model
       
   metrics: 
     kinetic_energy: mean_absolute_error

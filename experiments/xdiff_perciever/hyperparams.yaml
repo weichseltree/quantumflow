@@ -211,6 +211,8 @@ debug_x:
     
 debug_x_new:
   <<: *default
+  model: 
+    <<: *default-model
     num_heads: 16
     d_cross: 32
     num_layers: 0

@@ -170,7 +170,7 @@ debug_new:
     <<: *default-model
     num_heads: 16
     d_cross: 32
-    num_layers: 1
+    num_layers: 0
   
   
 debug_kernel:
@@ -209,6 +209,7 @@ debug_x:
     scale: 1.0
     latents_per_x: 1
     
+    
 debug_x_new:
   <<: *default
   model: 
@@ -216,3 +217,23 @@ debug_x_new:
     num_heads: 16
     d_cross: 32
     num_layers: 0
+    
+    
+debug_x_slim:
+  <<: *default
+  model: 
+    <<: *default-model
+    num_repeats: 8
+    num_layers: 0
+    
+    d_model: 32
+    d_cross: 32
+    num_heads: 8
+    
+    dff_input: [32]
+    dff: 32
+    dff_final: [32]
+    
+    dropout_rate: 0.0
+    scale: 1.0
+    latents_per_x: 1

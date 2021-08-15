@@ -114,14 +114,12 @@ class XdiffMultiHeadAttention(tf.keras.layers.Layer):
         v = self.wv(v) # (..., size_v, d_attn)
         x = self.wx(q) # (..., size_q, num_heads*num_x_features)
         
-        #a = self.wa(q) # (..., size_q, num_heads)
-        
         q = self.split_heads(q, batch_sizes)  # (..., num_heads, size_q, depth)
         k = self.split_heads(k, batch_sizes)  # (..., num_heads, size_k, depth)
         v = self.split_heads(v, batch_sizes)  # (..., num_heads, size_v, depth)
         
+        # xdiff (..., size_q, size_k, x_features)
         x = tf.reshape(x, batch_sizes + [-1, self.num_heads, self.num_x_features]) # (..., size_q, num_heads, num_x_features)
-        # (..., size_q, size_k, x_features)
         x_diff_logits = tf.matmul(xdiff, x, transpose_b=True) # (..., size_q, size_k, num_heads)
         
         x_diff_logits = tf.transpose(x_diff_logits, perm=list(range(len(batch_sizes))) + [len(batch_sizes)+2, len(batch_sizes), len(batch_sizes)+1])  

@@ -209,3 +209,8 @@ debug_x:
     scale: 1.0
     latents_per_x: 1
     
+debug_x_new:
+  <<: *default
+    num_heads: 16
+    d_cross: 32
+    num_layers: 0

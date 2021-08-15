@@ -242,7 +242,7 @@ debug_x_slim:
 debug_x_deriv:
   <<: *default
  
-  dataset_train: &derivative-dataset_train
+  dataset_train: &debug_x_deriv-dataset_train
     <<: *default-dataset_train
     targets: 
       - kinetic_energy

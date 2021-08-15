@@ -423,33 +423,3 @@ class XdiffPerciever(tf.keras.layers.Layer):
         outputs = self.final_layer(latents)
         
         return outputs # (..., latent_size, num_outputs)
-
-    def get_core(self, x_outputs, x_inputs, inputs, training=False, mask=None):
-        x_token = self.x_token # (d_model)
-        for shape in tf.unstack(tf.shape(x_outputs))[:-2]:
-            x_token = tf.repeat(tf.expand_dims(x_token, axis=-3), shape, axis=-3) # (..., latent_size, d_model)
-        x_token = tf.repeat(x_token, tf.shape(x_outputs)[-2], axis=0)
-        
-        x_outputs = tf.repeat(x_outputs, self.latents_per_x, axis=-2)
-        xdiff = get_xdiff(x_outputs, x_outputs)/self.scale # (..., latent_size, latent_size)
-        xdiff_cross = get_xdiff(x_outputs, x_inputs)/self.scale # (..., latent_size, input_size)
-            
-        latents = x_token
-        
-        layers = []
-        for r in range(self.num_repeats):
-            for i in range(self.num_layers):
-                layers.append(self.enc_layers[r][i])
-            layers.append(self.cross_enc_layers[r])
-
-        for i in range(self.num_layers):
-            layers.append(self.enc_layers[self.num_repeats][i])
-            
-        layers.append(self.layernorm)
-        
-        for layer in self.pre_final_layers:
-            layers.append(layer)
-            
-        layers.append(self.final_layer)
-        
-        return latents, xdiff, inputs, xdiff_cross, layers

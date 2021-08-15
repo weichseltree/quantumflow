@@ -237,3 +237,41 @@ debug_x_slim:
     dropout_rate: 0.0
     scale: 1.0
     latents_per_x: 1
+
+
+debug_x_deriv:
+  <<: *default
+ 
+  dataset_train: &derivative-dataset_train
+    <<: *default-dataset_train
+    targets: 
+      - kinetic_energy
+      - kinetic_energy_density
+      - derivative
+      
+  dataset_validate:
+    <<: *derivative-dataset_train
+    run_name: validate_dataset
+
+  model:
+    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
+    base_model:
+      <<: *default-model
+      num_heads: 16
+      d_cross: 32
+      num_layers: 0
+      
+  metrics: 
+    kinetic_energy: mean_absolute_error
+    kinetic_energy_density: mean_absolute_error
+    derivative: mean_absolute_error
+
+  loss: 
+    kinetic_energy: mean_squared_error
+    kinetic_energy_density: mean_squared_error
+    derivative: mean_squared_error
+
+  loss_weights:
+    kinetic_energy: 0
+    kinetic_energy_density: 1.0
+    derivative: 1.0

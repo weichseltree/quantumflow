@@ -344,15 +344,15 @@ default_slim:
   <<: *default
   model:
     <<: *default-model
-    num_repeats: 2
+    num_repeats: 1
     num_layers: 0
     
-    d_model: 32
+    d_model: 16
     d_cross: 16
     num_heads: 8
     
     dff_input: []
-    dff: 32
+    dff: 16
     dff_final: []
     
     dropout_rate: 0.0

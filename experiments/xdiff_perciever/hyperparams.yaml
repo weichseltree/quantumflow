@@ -35,6 +35,7 @@ default: &default
     dropout_rate: 0.0
     scale: 1.0
     latents_per_x: 1
+    K: 10
 
 
   metrics: 
@@ -289,3 +290,12 @@ debug_x_slim_batch:
     class: quantumflow.utils.CustomTensorBoard
     histogram_freq: 500 # epochs
     metrics_freq: 5 # epochs
+    
+
+debug_x_token_new:
+  <<: *default
+  model: 
+    <<: *default-model
+    num_heads: 16
+    d_cross: 32
+    num_layers: 0

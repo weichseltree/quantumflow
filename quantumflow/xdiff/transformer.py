@@ -4,41 +4,36 @@ import tensorflow as tf
 import numpy as np
 
 
-def get_xdiff(x1, x2):
-    xdiff = tf.expand_dims(x1, axis=-2) - tf.expand_dims(x2, axis=-3)
-    xdiff =  tf.sqrt(tf.reduce_sum(tf.square(xdiff), axis=-1)) # (..., seq_len, seq_len)
+def positional_encoding(x, K):
+    k_bands = np.pi*tf.range(1, K+1, dtype=x.dtype)
     
-    xdiff = tf.stack([
-        xdiff, 
-        xdiff**2,
-        tf.sin(np.pi*xdiff),
-        tf.cos(np.pi*xdiff),
-        tf.sin(np.pi*2*xdiff),
-        tf.cos(np.pi*2*xdiff),
-        tf.sin(np.pi*3*xdiff),
-        tf.cos(np.pi*3*xdiff),
-        tf.sin(np.pi*4*xdiff),
-        tf.cos(np.pi*4*xdiff),
-        tf.sin(np.pi*5*xdiff),
-        tf.cos(np.pi*5*xdiff),
-        tf.sin(np.pi*6*xdiff),
-        tf.cos(np.pi*6*xdiff),
-        tf.sin(np.pi*7*xdiff),
-        tf.cos(np.pi*7*xdiff),
-        tf.sin(np.pi*8*xdiff),
-        tf.cos(np.pi*8*xdiff),
-        tf.sin(np.pi*9*xdiff),
-        tf.cos(np.pi*9*xdiff),
-        tf.sin(np.pi*10*xdiff),
-        tf.cos(np.pi*10*xdiff),
-        tf.sin(np.pi*11*xdiff),
-        tf.cos(np.pi*11*xdiff),
-        tf.sin(np.pi*12*xdiff),
-        tf.cos(np.pi*12*xdiff),
-    ], axis=-1) # (..., latent_size, latent_size, x_features)
-    return xdiff
-        
+    for _ in range(len(x.shape)-1):
+        k_bands = tf.expand_dims(k_bands, axis=0) # (..., 1, 1, K)
 
+    k_sin = tf.sin(x*k_bands) # (..., x1_size, x2_size, K)
+    k_cos = tf.cos(x*k_bands) # (..., x1_size, x2_size, K)
+    
+    pos_encoding = tf.reshape(
+        tf.concat([k_sin[..., tf.newaxis], k_cos[..., tf.newaxis]], axis=-1), 
+        [*tf.unstack(tf.shape(k_sin)[:-1]), -1])
+    
+    return pos_encoding
+
+
+def get_xdiff(x1, x2, scale, K):
+    x1 /= scale
+    x2 /= scale
+    
+    xdiff = tf.expand_dims(x1, axis=-2) - tf.expand_dims(x2, axis=-3)
+    xdiff =  tf.expand_dims(tf.sqrt(tf.reduce_sum(tf.square(xdiff), axis=-1)), axis=-1) # (..., x1_size, x2_size, 1)
+    
+    xdiff_features = tf.concat([
+        xdiff, 
+        positional_encoding(xdiff, K)
+    ], axis=-1) # (..., x1_size, x2_size, x_features)
+    
+    return tf.ensure_shape(xdiff_features, [None]*len(x1.shape) + [2*K + 1])
+        
 
 def scaled_dot_product_attention(q, k, v, initial_attention_logits=None, mask=None):
     """Calculate the attention weights.
@@ -174,7 +169,7 @@ class XdiffEncoderLayer(tf.keras.layers.Layer):
     
 class XdiffTransformer(tf.keras.layers.Layer):
     def __init__(self, num_outputs, num_layers, d_model, num_heads, dff_input, dff, dff_final, 
-                 activation='gelu', kernel_scale=None, dropout_rate=0.1, scale=1.0):
+                 activation='gelu', kernel_scale=None, dropout_rate=0.1, K=10, scale=1.0):
         super().__init__()
         self.num_outputs = num_outputs
         self.d_model = d_model
@@ -185,6 +180,7 @@ class XdiffTransformer(tf.keras.layers.Layer):
         self.num_heads = num_heads
         self.dropout_rate = dropout_rate
         self.activation = activation
+        self.K = K
         
         self.scale = scale
         
@@ -197,7 +193,8 @@ class XdiffTransformer(tf.keras.layers.Layer):
         self.x_token = self.add_weight(name='x_token', shape=(d_model,), dtype=tf.float32, trainable=True, 
                                        initializer=tf.keras.initializers.RandomNormal(stddev=kernel_scale)) # (d_model)
     
-        self.enc_layers = [XdiffEncoderLayer(d_model, num_heads, dff, activation=activation, 
+        num_x_features = 2*K + 1
+        self.enc_layers = [XdiffEncoderLayer(d_model, num_heads, num_x_features, dff, activation=activation, 
                                              dropout_rate=dropout_rate, kernel_initializer=self.kernel_initializer) for _ in range(num_layers)]
 
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='final_layernorm')
@@ -221,7 +218,7 @@ class XdiffTransformer(tf.keras.layers.Layer):
     
     def call(self, x, x_inputs, inputs, training=False, mask=None):        
         x_all = tf.concat([tf.expand_dims(x, axis=-2), x_inputs], axis=-2) # (..., input_size+1, num_dims)
-        xdiff = get_xdiff(x_all, x_all)/self.scale # (..., input_size+1, input_size+1)
+        xdiff = get_xdiff(x_all, x_all, self.scale, self.K) # (..., input_size+1, input_size+1, num_x_features)
         
         x_token = self.x_token # (d_model)
         for shape in tf.unstack(tf.shape(x))[:-1]:
@@ -337,9 +334,37 @@ class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
         return latents + ffn_output  # (..., latent_size, d_model)
     
     
+class XTokenLayer(tf.keras.layers.Layer):
+    def __init__(self, d_model, activation='gelu', kernel_initializer=None):
+        super().__init__()
+        self.d_model = d_model
+        
+        self.wxl = tf.keras.layers.Dense(d_model, activation=activation, name='xdiff_latents')
+        self.wxi = tf.keras.layers.Dense(d_model, activation=activation, name='xdiff_inputs')
+        
+        
+    def call(self, xdiff, xdiff_cross, training=False, mask=None):
+        
+        # xdiff (..., latent_size, latent_size, num_x_features)
+        # xdiff_cross (..., latent_size, input_size, num_x_features)
+        
+        xl = self.wxl(xdiff) # (..., latent_size, latent_size, d_model)
+        xi = self.wxi(xdiff_cross) # (..., latent_size, input_size, d_model)
+        
+        #attention_weights = tf.nn.softmax(xl, axis=-1)  # (..., size_q, size_k)
+        #attention_weights = tf.nn.softmax(xi, axis=-1)  # (..., size_q, size_k)
+    
+        #output = tf.matmul(attention_weights, v)  # (..., size_q, depth_v)
+        
+        x_token = tf.reduce_mean(xl, axis=-2) + tf.reduce_mean(xi, axis=-2)
+
+        return x_token
+    
+        
+    
 class XdiffPerciever(tf.keras.layers.Layer):
     def __init__(self, num_outputs, num_layers, num_repeats, latents_per_x, d_cross, d_model, num_heads, dff_input, dff, dff_final, share_weights=False, 
-                 activation='gelu', kernel_scale=None, dropout_rate=0.1, scale=1.0):
+                 activation='gelu', kernel_scale=None, dropout_rate=0.1, K=10, scale=1.0):
         super().__init__()
         self.num_outputs = num_outputs
         self.num_layers = num_layers
@@ -357,6 +382,7 @@ class XdiffPerciever(tf.keras.layers.Layer):
         self.dropout_rate = dropout_rate
         self.activation = activation
         
+        self.K = K
         self.scale = scale
         
         if kernel_scale is None:
@@ -367,7 +393,9 @@ class XdiffPerciever(tf.keras.layers.Layer):
         self.x_token = self.add_weight(name='x_token', shape=(latents_per_x, d_model), dtype=tf.float32, trainable=True, 
                                        initializer=tf.keras.initializers.RandomNormal(stddev=kernel_scale)) # (d_model)
         
-        num_x_features = 26
+        self.x_token_layer = XTokenLayer(d_model)
+        
+        num_x_features = 2*K + 1
         self.enc_layers = [[XdiffEncoderLayer(d_model, num_heads, num_x_features, dff, activation=activation, 
                                               dropout_rate=dropout_rate, kernel_initializer=self.kernel_initializer) for _ in range(num_layers)] for _ in range(num_repeats+1)]
         self.cross_enc_layers = [XdiffCrossEncoderLayer(d_cross, d_model, num_heads, num_x_features, dff, dff_input, activation=activation, 
@@ -395,17 +423,17 @@ class XdiffPerciever(tf.keras.layers.Layer):
             "scale": self.scale,
         }
     
-    def call(self, x_outputs, x_inputs, inputs, training=False, mask=None):    
-        x_token = self.x_token # (d_model)
-        for shape in tf.unstack(tf.shape(x_outputs))[:-2]:
-            x_token = tf.repeat(tf.expand_dims(x_token, axis=-3), shape, axis=-3) # (..., latent_size, d_model)
-        x_token = tf.repeat(x_token, tf.shape(x_outputs)[-2], axis=0)
+    def call(self, x, x_inputs, inputs, training=False, mask=None):    
+        #x_token = self.x_token # (d_model)
+        #for shape in tf.unstack(tf.shape(x_outputs))[:-2]:
+        #    x_token = tf.repeat(tf.expand_dims(x_token, axis=-3), shape, axis=-3) # (..., latent_size, d_model)
+        #x_token = tf.repeat(x_token, tf.shape(x_outputs)[-2], axis=0)
         
-        x_outputs = tf.repeat(x_outputs, self.latents_per_x, axis=-2)
-        xdiff = get_xdiff(x_outputs, x_outputs)/self.scale # (..., latent_size, latent_size, x_features)
-        xdiff_cross = get_xdiff(x_outputs, x_inputs)/self.scale # (..., latent_size, input_size, x_features)
+        x_outputs = tf.repeat(x, self.latents_per_x, axis=-2)
+        xdiff = get_xdiff(x, x, self.scale, self.K) # (..., latent_size, latent_size, x_features)
+        xdiff_cross = get_xdiff(x, x_inputs, self.scale, self.K) # (..., latent_size, input_size, x_features)
         
-        latents = x_token
+        latents = self.x_token_layer(xdiff, xdiff_cross)
         
         for r in range(self.num_repeats):
             for i in range(self.num_layers):

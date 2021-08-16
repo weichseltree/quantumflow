@@ -339,3 +339,33 @@ debug_inputs_new:
     d_cross: 32
     num_layers: 0
     
+
+default_slim:
+  <<: *default
+  model:
+    <<: *default-model
+    num_repeats: 2
+    num_layers: 0
+    
+    d_model: 32
+    d_cross: 16
+    num_heads: 8
+    
+    dff_input: []
+    dff: 32
+    dff_final: []
+    
+    dropout_rate: 0.0
+    scale: 1.0
+    latents_per_x: 1
+    
+  fit: 
+    <<: *default-fit
+    batch_size: 100
+    epochs: 100000
+    validation_freq: 10000  # epochs
+
+  tensorboard: 
+    <<: *default-tensorboard0
+    histogram_freq: 10000 # epochs
+    metrics_freq: 100 # epochs0

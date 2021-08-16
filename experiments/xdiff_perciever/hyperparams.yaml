@@ -299,3 +299,13 @@ debug_x_token_new:
     num_heads: 16
     d_cross: 32
     num_layers: 0
+    
+    
+debug_x_token_new_K:
+  <<: *default
+  model: 
+    <<: *default-model
+    num_heads: 16
+    d_cross: 32
+    num_layers: 0
+    K: 20

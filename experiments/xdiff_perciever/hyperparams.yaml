@@ -340,9 +340,9 @@ debug_inputs_new:
     num_layers: 0
     
 
-default_slim:
+default_slim: &default_slim
   <<: *default
-  model:
+  model: &default_slim-model
     <<: *default-model
     num_repeats: 1
     num_layers: 0
@@ -371,3 +371,10 @@ default_slim:
     <<: *default-tensorboard
     histogram_freq: 10000 # epochs
     metrics_freq: 100 # epochs
+
+
+default_slim_no_x_token:
+  <<: *default_slim
+  model: 
+    <<: *default_slim-model
+    num_repeats: 2

@@ -386,7 +386,10 @@ class XdiffPerciever(tf.keras.layers.Layer):
         
         self.kernel_initializer = tf.keras.initializers.VarianceScaling(scale=kernel_scale, mode='fan_avg', distribution='uniform') # scaled Glorot uniform
 
-        self.x_token_layer = XTokenLayer(d_model)
+        self.x_token = self.add_weight(name='x_token', shape=(latents_per_x, d_model), dtype=tf.float32, trainable=True, 
+                                       initializer=tf.keras.initializers.RandomNormal(stddev=kernel_scale)) # (d_model)
+        
+        #self.x_token_layer = XTokenLayer(d_model)
         
         num_x_features = 2*K + 1
         self.enc_layers = [[XdiffEncoderLayer(d_model, num_heads, num_x_features, dff, activation=activation, 
@@ -417,16 +420,16 @@ class XdiffPerciever(tf.keras.layers.Layer):
         }
     
     def call(self, x, x_inputs, inputs, training=False, mask=None):    
-        #x_token = self.x_token # (d_model)
-        #for shape in tf.unstack(tf.shape(x_outputs))[:-2]:
-        #    x_token = tf.repeat(tf.expand_dims(x_token, axis=-3), shape, axis=-3) # (..., latent_size, d_model)
-        #x_token = tf.repeat(x_token, tf.shape(x_outputs)[-2], axis=0)
+        x_token = self.x_token # (d_model)
+        for shape in tf.unstack(tf.shape(x))[:-2]:
+            x_token = tf.repeat(tf.expand_dims(x_token, axis=-3), shape, axis=-3) # (..., latent_size, d_model)
+        x_token = tf.repeat(x_token, tf.shape(x)[-2], axis=0)
         
         x_outputs = tf.repeat(x, self.latents_per_x, axis=-2)
         xdiff = get_xdiff(x, x, self.scale, self.K) # (..., latent_size, latent_size, x_features)
         xdiff_cross = get_xdiff(x, x_inputs, self.scale, self.K) # (..., latent_size, input_size, x_features)
         
-        latents = self.x_token_layer(xdiff, xdiff_cross)
+        latents = x_token #self.x_token_layer(xdiff, xdiff_cross)
         
         inputs = positional_encoding(inputs, self.K_input)
         

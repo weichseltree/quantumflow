@@ -351,11 +351,6 @@ class XTokenLayer(tf.keras.layers.Layer):
         xl = self.wxl(xdiff) # (..., latent_size, latent_size, d_model)
         xi = self.wxi(xdiff_cross) # (..., latent_size, input_size, d_model)
         
-        #attention_weights = tf.nn.softmax(xl, axis=-1)  # (..., size_q, size_k)
-        #attention_weights = tf.nn.softmax(xi, axis=-1)  # (..., size_q, size_k)
-    
-        #output = tf.matmul(attention_weights, v)  # (..., size_q, depth_v)
-        
         x_token = tf.reduce_mean(xl, axis=-2) + tf.reduce_mean(xi, axis=-2)
 
         return x_token
@@ -390,14 +385,11 @@ class XdiffPerciever(tf.keras.layers.Layer):
         
         self.kernel_initializer = tf.keras.initializers.VarianceScaling(scale=kernel_scale, mode='fan_avg', distribution='uniform') # scaled Glorot uniform
 
-        self.x_token = self.add_weight(name='x_token', shape=(latents_per_x, d_model), dtype=tf.float32, trainable=True, 
-                                       initializer=tf.keras.initializers.RandomNormal(stddev=kernel_scale)) # (d_model)
-        
         self.x_token_layer = XTokenLayer(d_model)
         
         num_x_features = 2*K + 1
         self.enc_layers = [[XdiffEncoderLayer(d_model, num_heads, num_x_features, dff, activation=activation, 
-                                              dropout_rate=dropout_rate, kernel_initializer=self.kernel_initializer) for _ in range(num_layers)] for _ in range(num_repeats+1)]
+                                              dropout_rate=dropout_rate, kernel_initializer=self.kernel_initializer) for _ in range(num_layers)] for _ in range(num_repeats)]
         self.cross_enc_layers = [XdiffCrossEncoderLayer(d_cross, d_model, num_heads, num_x_features, dff, dff_input, activation=activation, 
                                                         dropout_rate=dropout_rate, kernel_initializer=self.kernel_initializer) for _ in range(num_repeats)]
 
@@ -436,12 +428,10 @@ class XdiffPerciever(tf.keras.layers.Layer):
         latents = self.x_token_layer(xdiff, xdiff_cross)
         
         for r in range(self.num_repeats):
+            latents = self.cross_enc_layers[r](latents, inputs, xdiff_cross, training=training, mask=mask)
+            
             for i in range(self.num_layers):
                 latents = self.enc_layers[r][i](latents, xdiff, training=training, mask=None)
-            latents = self.cross_enc_layers[r](latents, inputs, xdiff_cross, training=training, mask=mask)
-
-        for i in range(self.num_layers):
-            latents = self.enc_layers[self.num_repeats][i](latents, xdiff, training=training, mask=None)
             
         latents = self.layernorm(latents)
         

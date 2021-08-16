@@ -363,11 +363,11 @@ default_slim:
     
   fit: 
     <<: *default-fit
-    batch_size: 100
-    epochs: 100000
-    validation_freq: 10000  # epochs
+    batch_size: 10
+    epochs: 10000
+    validation_freq: 1000  # epochs
 
   tensorboard: 
     <<: *default-tensorboard
-    histogram_freq: 10000 # epochs
-    metrics_freq: 100 # epochs
+    histogram_freq: 1000 # epochs
+    metrics_freq: 10 # epochs

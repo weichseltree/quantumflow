@@ -366,6 +366,6 @@ default_slim:
     validation_freq: 10000  # epochs
 
   tensorboard: 
-    <<: *default-tensorboard0
+    <<: *default-tensorboard
     histogram_freq: 10000 # epochs
     metrics_freq: 100 # epochs0

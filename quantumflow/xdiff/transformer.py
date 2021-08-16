@@ -359,7 +359,7 @@ class XTokenLayer(tf.keras.layers.Layer):
     
 class XdiffPerciever(tf.keras.layers.Layer):
     def __init__(self, num_outputs, num_layers, num_repeats, latents_per_x, d_cross, d_model, num_heads, dff_input, dff, dff_final, share_weights=False, 
-                 activation='gelu', kernel_scale=None, dropout_rate=0.1, K=10, scale=1.0):
+                 activation='gelu', kernel_scale=None, dropout_rate=0.1, K=10, scale=1.0, K_input=10):
         super().__init__()
         self.num_outputs = num_outputs
         self.num_layers = num_layers
@@ -379,6 +379,7 @@ class XdiffPerciever(tf.keras.layers.Layer):
         
         self.K = K
         self.scale = scale
+        self.K_input = K_input
         
         if kernel_scale is None:
             kernel_scale = 1/np.sqrt(num_layers*num_repeats+num_layers+num_repeats)
@@ -427,7 +428,7 @@ class XdiffPerciever(tf.keras.layers.Layer):
         
         latents = self.x_token_layer(xdiff, xdiff_cross)
         
-        inputs = positional_encoding(inputs, 10)
+        inputs = positional_encoding(inputs, self.K_input)
         
         for r in range(self.num_repeats):
             latents = self.cross_enc_layers[r](latents, inputs, xdiff_cross, training=training, mask=mask)

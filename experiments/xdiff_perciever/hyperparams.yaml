@@ -358,6 +358,8 @@ default_slim:
     dropout_rate: 0.0
     scale: 1.0
     latents_per_x: 1
+    K: 4
+    K_input: 4
     
   fit: 
     <<: *default-fit
@@ -368,4 +370,4 @@ default_slim:
   tensorboard: 
     <<: *default-tensorboard
     histogram_freq: 10000 # epochs
-    metrics_freq: 100 # epochs0
+    metrics_freq: 100 # epochs

@@ -311,7 +311,7 @@ debug_x_token_new_K:
     K: 20
 
 
-debug_x_slim_2:
+debug_x_slim_2: &debug_x_slim_2
   <<: *default
   model:
     <<: *default-model
@@ -378,3 +378,6 @@ default_slim_no_x_token:
   model: 
     <<: *default_slim-model
     num_repeats: 2
+
+default_x_slim_2_no_x_token:
+  <<: *default_x_slim_2

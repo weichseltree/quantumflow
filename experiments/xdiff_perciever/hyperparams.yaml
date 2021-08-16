@@ -379,5 +379,5 @@ default_slim_no_x_token:
     <<: *default_slim-model
     num_repeats: 2
 
-default_x_slim_2_no_x_token:
-  <<: *default_x_slim_2
+debug_x_slim_2_no_x_token:
+  <<: *debug_x_slim_2

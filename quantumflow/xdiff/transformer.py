@@ -17,7 +17,7 @@ def positional_encoding(x, K):
         tf.concat([k_sin[..., tf.newaxis], k_cos[..., tf.newaxis]], axis=-1), 
         [*tf.unstack(tf.shape(k_sin)[:-1]), -1])
     
-    return pos_encoding
+    return tf.ensure_shape(pos_encoding, [None]*len(x.shape[:-1]) + [2*K])
 
 
 def get_xdiff(x1, x2, scale, K):
@@ -32,7 +32,7 @@ def get_xdiff(x1, x2, scale, K):
         positional_encoding(xdiff, K)
     ], axis=-1) # (..., x1_size, x2_size, x_features)
     
-    return tf.ensure_shape(xdiff_features, [None]*len(x1.shape) + [2*K + 1])
+    return xdiff_features
         
 
 def scaled_dot_product_attention(q, k, v, initial_attention_logits=None, mask=None):
@@ -426,6 +426,8 @@ class XdiffPerciever(tf.keras.layers.Layer):
         xdiff_cross = get_xdiff(x, x_inputs, self.scale, self.K) # (..., latent_size, input_size, x_features)
         
         latents = self.x_token_layer(xdiff, xdiff_cross)
+        
+        inputs = positional_encoding(inputs, 10)
         
         for r in range(self.num_repeats):
             latents = self.cross_enc_layers[r](latents, inputs, xdiff_cross, training=training, mask=mask)

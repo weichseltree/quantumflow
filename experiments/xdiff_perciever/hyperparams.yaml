@@ -309,3 +309,33 @@ debug_x_token_new_K:
     d_cross: 32
     num_layers: 0
     K: 20
+
+
+debug_x_slim_2:
+  <<: *default
+  model:
+    <<: *default-model
+    num_repeats: 6
+    num_layers: 0
+    
+    d_model: 32
+    d_cross: 32
+    num_heads: 8
+    
+    dff_input: []
+    dff: 32
+    dff_final: []
+    
+    dropout_rate: 0.0
+    scale: 1.0
+    latents_per_x: 1
+    
+
+debug_inputs_new:
+  <<: *default
+  model: 
+    <<: *default-model
+    num_heads: 16
+    d_cross: 32
+    num_layers: 0
+    

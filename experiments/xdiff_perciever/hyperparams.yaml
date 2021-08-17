@@ -102,7 +102,7 @@ default: &default
   save: True
 
 
-derivative: 
+derivative: &derivative
   <<: *default
   
   dataset_train: &derivative-dataset_train
@@ -136,3 +136,9 @@ derivative:
     kinetic_energy: 0
     kinetic_energy_density: 1.0
     derivative: 1.0
+
+default_ni:
+  <<: *default
+  
+derivative_ni:
+  <<: *derivative

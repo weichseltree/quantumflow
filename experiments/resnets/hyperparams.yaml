@@ -108,9 +108,9 @@ resnet_100: &resnet_100
 
   save: True
   save_model: base_model
+  
 
-
-resnet_100_no_deriv:
+resnet_100_no_deriv: &resnet_100_no_deriv
   <<: *resnet_100
   dataset_train: &resnet_100_no_deriv-dataset_train
     <<: *resnet_100-dataset_train
@@ -137,6 +137,21 @@ resnet_100_no_deriv:
     kinetic_energy: 0
     kinetic_energy_density: 1.0
     
+    
+resnet_xdiff_compare:
+  <<: *resnet_100_no_deriv
+  
+  fit: 
+    <<: *resnet_100-fit
+    batch_size: 1
+    epochs: 1000
+    validation_freq: 100  # epochs
+
+  tensorboard: 
+    <<: *resnet_100-tensorboard
+    histogram_freq: 100 # epochs
+    metrics_freq: 1 # epochs
+
 
 resnet_100000:
   <<: *resnet_100

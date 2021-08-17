@@ -431,7 +431,10 @@ class XdiffPerciever(tf.keras.layers.Layer):
         
         latents = x_token #self.x_token_layer(xdiff, xdiff_cross)
         
-        inputs = positional_encoding(inputs, self.K_input)
+        inputs = tf.concat([
+            inputs, 
+            positional_encoding(inputs, self.K_input)
+        ], axis=-1) # (..., x1_size, x2_size, x_features)
         
         for r in range(self.num_repeats):
             latents = self.cross_enc_layers[r](latents, inputs, xdiff_cross, training=training, mask=mask)

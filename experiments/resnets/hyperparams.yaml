@@ -151,6 +151,21 @@ resnet_xdiff_compare:
     <<: *resnet_100-tensorboard
     histogram_freq: 100 # epochs
     metrics_freq: 1 # epochs
+    
+    
+resnet_xdiff_compare_derivative:
+  <<: *resnet_100
+  
+  fit: 
+    <<: *resnet_100-fit
+    batch_size: 1
+    epochs: 1000
+    validation_freq: 100  # epochs
+
+  tensorboard: 
+    <<: *resnet_100-tensorboard
+    histogram_freq: 100 # epochs
+    metrics_freq: 1 # epochs
 
 
 resnet_100000:

@@ -27,10 +27,9 @@ default: &default
     num_layers: 0
     num_repeats: 8
     d_model: 128
-    d_cross: 32
+    d_cross: 64
     num_heads: 8
     
-    dff_input: [64]
     dff: 128
     dff_final: [64]
     
@@ -38,8 +37,8 @@ default: &default
     dropout_rate: 0.0
     scale: 1.0
     
-    K: 10
-    K_input: 10
+    K: 5
+    K_input: 3
 
 
   metrics: 
@@ -116,6 +115,7 @@ derivative:
   dataset_validate:
     <<: *derivative-dataset_train
     run_name: validate_dataset
+    max_batch_size: 1
 
   model:
     class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel

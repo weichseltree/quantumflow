@@ -20,7 +20,7 @@ class KineticEnergyFunctionalDerivativeModel(tf.keras.Model):
             tape.watch(density)
             outputs = self.base_model(density)
 
-        outputs['derivative'] = tf.identity(1/self.h*tape.gradient(outputs['kinetic_energy'], density), name='derivative')
+        outputs['derivative'] = tf.identity(1/self.h*tape.gradient(outputs['kinetic_energy'], density)[0], name='derivative')
         return outputs
 
     def _set_output_attrs(self, outputs):

@@ -23,19 +23,23 @@ default: &default
     max_batch_size: 1
 
   model: &default-model
-    class: quantumflow.xdiff.XdiffPerciever_KineticEnergyDensityFunctional
-    num_layers: 1
+    class: quantumflow.xdiff.XdiffPerciever_KineticEnergyDensityFunctional    
+    num_layers: 0
     num_repeats: 8
-    d_model: 64
-    d_cross: 64
-    dff_input: [64, 128]
-    dff: 128
-    dff_final: [128, 64]
+    d_model: 128
+    d_cross: 32
     num_heads: 8
+    
+    dff_input: [64]
+    dff: 128
+    dff_final: [64]
+    
+    latents_per_x: 1
     dropout_rate: 0.0
     scale: 1.0
-    latents_per_x: 1
+    
     K: 10
+    K_input: 10
 
 
   metrics: 
@@ -64,7 +68,7 @@ default: &default
 
     learning_rate: &default-optimizer-learning_rate
       class: quantumflow.utils.WarmupExponentialDecay
-      initial_learning_rate: 0.000025
+      initial_learning_rate: 0.0001
       final_learning_rate: 0.0000000001
       decay_rate: 0.9
       decay_steps: 1000 # batches
@@ -132,252 +136,3 @@ derivative:
     kinetic_energy: 0
     kinetic_energy_density: 1.0
     derivative: 1.0
-
-
-latents:
-  <<: *default
-  model: 
-    <<: *default-model
-    num_heads: 16
-    latents_per_x: 16
-    
-    
-debug:
-  <<: *default
-  model: 
-    <<: *default-model
-    num_heads: 16
-    latents_per_x: 1
-    
-    
-debug_scaled:
-  <<: *default
-  model: 
-    <<: *default-model
-    num_heads: 16
-    dff_input: []
-  
-  
-debug_input:
-  <<: *default
-  model: 
-    <<: *default-model
-    num_heads: 16
-  
-  
-debug_new:
-  <<: *default
-  model: 
-    <<: *default-model
-    num_heads: 16
-    d_cross: 32
-    num_layers: 0
-  
-  
-debug_kernel:
-  <<: *default
-  model: 
-    <<: *default-model
-    num_heads: 16
-    d_cross: 32
-    num_layers: 1
-  
-  
-debug_kernel_fix:
-  <<: *default
-  model: 
-    <<: *default-model
-    num_heads: 16
-    d_cross: 32
-    num_layers: 0
-  
-debug_x:
-  <<: *default
-  model: 
-    <<: *default-model
-    num_repeats: 16
-    num_layers: 0
-    
-    d_model: 64
-    d_cross: 32
-    num_heads: 8
-    
-    dff_input: [64]
-    dff: 64
-    dff_final: [64]
-    
-    dropout_rate: 0.0
-    scale: 1.0
-    latents_per_x: 1
-    
-    
-debug_x_new:
-  <<: *default
-  model: 
-    <<: *default-model
-    num_heads: 16
-    d_cross: 32
-    num_layers: 0
-    
-    
-debug_x_slim:
-  <<: *default
-  model: &debug_x_slim-model
-    <<: *default-model
-    num_repeats: 8
-    num_layers: 0
-    
-    d_model: 32
-    d_cross: 32
-    num_heads: 8
-    
-    dff_input: [32]
-    dff: 32
-    dff_final: [32]
-    
-    dropout_rate: 0.0
-    scale: 1.0
-    latents_per_x: 1
-
-
-debug_x_slim_deriv:
-  <<: *default
- 
-  dataset_train: &debug_x_slim_deriv-dataset_train
-    <<: *default-dataset_train
-    targets: 
-      - kinetic_energy
-      - kinetic_energy_density
-      - derivative
-      
-  dataset_validate:
-    <<: *debug_x_slim_deriv-dataset_train
-    run_name: validate_dataset
-
-  model:
-    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
-    base_model:
-      <<: *debug_x_slim-model
-      
-  metrics: 
-    kinetic_energy: mean_absolute_error
-    kinetic_energy_density: mean_absolute_error
-    derivative: mean_absolute_error
-
-  loss: 
-    kinetic_energy: mean_squared_error
-    kinetic_energy_density: mean_squared_error
-    derivative: mean_squared_error
-
-  loss_weights:
-    kinetic_energy: 0
-    kinetic_energy_density: 1.0
-    derivative: 1.0
-
-
-debug_x_slim_batch:
-  <<: *default
-  model: 
-    <<: *debug_x_slim-model
-    
-  fit: 
-    <<: *default-fit
-    batch_size: 5
-    validation_freq: 500  # epochs
-
-  tensorboard: 
-    <<: *default-tensorboard
-    class: quantumflow.utils.CustomTensorBoard
-    histogram_freq: 500 # epochs
-    metrics_freq: 5 # epochs
-    
-
-debug_x_token_new:
-  <<: *default
-  model: 
-    <<: *default-model
-    num_heads: 16
-    d_cross: 32
-    num_layers: 0
-    
-    
-debug_x_token_new_K:
-  <<: *default
-  model: 
-    <<: *default-model
-    num_heads: 16
-    d_cross: 32
-    num_layers: 0
-    K: 20
-
-
-debug_x_slim_2: &debug_x_slim_2
-  <<: *default
-  model:
-    <<: *default-model
-    num_repeats: 6
-    num_layers: 0
-    
-    d_model: 32
-    d_cross: 32
-    num_heads: 8
-    
-    dff_input: []
-    dff: 32
-    dff_final: []
-    
-    dropout_rate: 0.0
-    scale: 1.0
-    latents_per_x: 1
-    
-
-debug_inputs_new:
-  <<: *default
-  model: 
-    <<: *default-model
-    num_heads: 16
-    d_cross: 32
-    num_layers: 0
-    
-
-default_slim: &default_slim
-  <<: *default
-  model: &default_slim-model
-    <<: *default-model
-    num_repeats: 1
-    num_layers: 0
-    
-    d_model: 16
-    d_cross: 8
-    num_heads: 4
-    
-    dff_input: []
-    dff: 16
-    dff_final: []
-    
-    dropout_rate: 0.0
-    scale: 1.0
-    latents_per_x: 1
-    K: 4
-    K_input: 4
-    
-  fit: 
-    <<: *default-fit
-    batch_size: 100
-    epochs: 100000
-    validation_freq: 10000  # epochs
-
-  tensorboard: 
-    <<: *default-tensorboard
-    histogram_freq: 10000 # epochs
-    metrics_freq: 100 # epochs
-
-
-default_slim_no_x_token:
-  <<: *default_slim
-  model: 
-    <<: *default_slim-model
-    num_repeats: 2
-
-debug_x_slim_2_no_x_token:
-  <<: *debug_x_slim_2

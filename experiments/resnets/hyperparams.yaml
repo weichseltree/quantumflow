@@ -147,10 +147,42 @@ resnet_xdiff_compare:
     epochs: 1000
     validation_freq: 100  # epochs
 
+  checkpoint: 
+    <<: *resnet_100-checkpoint
+    save_freq: 2000000 # batches
+
   tensorboard: 
     <<: *resnet_100-tensorboard
     histogram_freq: 100 # epochs
     metrics_freq: 1 # epochs
+    
+    
+resnet_xdiff_compare_2:
+  <<: *resnet_100_no_deriv
+  
+  optimizer: 
+    <<: *resnet_100-optimizer
+    learning_rate: 
+      <<: *resnet_100-optimizer-learning_rate
+      initial_learning_rate: 0.0001
+      final_learning_rate: 0.0000000001
+      decay_rate: 0.9
+      decay_steps: 100000 # batches
+
+      cold_steps: 2180000 # batches
+      warmup_steps: 0 # batches
+      cold_factor: 1.0
+      
+  fit: 
+    <<: *resnet_100-fit
+    batch_size: 1
+    epochs: 100000
+    validation_freq: 10000  # epochs
+
+  tensorboard: 
+    <<: *resnet_100-tensorboard
+    histogram_freq: 10000 # epochs
+    metrics_freq: 100 # epochs
     
     
 resnet_xdiff_compare_derivative:

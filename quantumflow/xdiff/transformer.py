@@ -96,6 +96,14 @@ class XdiffMultiHeadAttention(tf.keras.layers.Layer):
         
         self.dense = tf.keras.layers.Dense(d_model, kernel_initializer=kernel_initializer, name='linear')
 
+    def get_config(self):
+        return {
+            "d_attn": self.d_attn,
+            "d_model": self.d_model,
+            "num_heads": self.num_heads,
+            "num_x_features": self.num_x_features
+        }
+    
     def split_heads(self, x, batch_sizes):
         """Split the last dimension into (num_heads, depth).
         Transpose the result such that the shape is (..., num_heads, size_x, depth)
@@ -141,6 +149,10 @@ class XdiffMultiHeadAttention(tf.keras.layers.Layer):
 class XdiffEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, num_x_features, dff, activation='gelu', dropout_rate=0.1, kernel_initializer=None):
         super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.num_x_features = num_x_features
+        self.dff = dff
 
         self.mha = XdiffMultiHeadAttention(d_model, d_model, num_heads, num_x_features, kernel_initializer=kernel_initializer)
         
@@ -155,6 +167,14 @@ class XdiffEncoderLayer(tf.keras.layers.Layer):
         self.dropout1 = tf.keras.layers.Dropout(dropout_rate)
         self.dropout2 = tf.keras.layers.Dropout(dropout_rate)
 
+    def get_config(self):
+        return {
+            "d_model": self.d_model,
+            "num_heads": self.num_heads,
+            "num_x_features": self.num_x_features,
+            "dff": self.dff,
+        }
+    
     def call(self, latents, xdiff, training=False, mask=None):
         lat = self.layernorm1(latents)  # (..., input_size, d_model)
         attn_output, _ = self.mha(lat, lat, lat, xdiff, mask=mask)  # (..., input_size, d_model)
@@ -208,9 +228,9 @@ class XdiffTransformer(tf.keras.layers.Layer):
             "num_layers": self.num_layers,
             "d_model": self.d_model,
             "num_heads": self.num_heads,
-            "activation": self.activation,
             "dff": self.dff,
             "dff_final": self.dff_final,
+            "activation": self.activation,
             "dropout_rate": self.dropout_rate,
             "scale": self.scale,
         }
@@ -296,7 +316,13 @@ class TFWhileXdiffTransformer(XdiffTransformer):
 class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, d_cross, d_model, num_heads, num_x_features, dff, activation='gelu', dropout_rate=0.1, kernel_initializer=None):
         super().__init__()
-
+        
+        self.d_cross = d_cross
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.num_x_features = num_x_features
+        self.dff = dff
+        
         self.mha = XdiffMultiHeadAttention(d_cross, d_model, num_heads, num_x_features, kernel_initializer=kernel_initializer)
         
         self.ffn = [
@@ -309,6 +335,15 @@ class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
 
         self.dropout1 = tf.keras.layers.Dropout(dropout_rate)
         self.dropout2 = tf.keras.layers.Dropout(dropout_rate)
+        
+    def get_config(self):
+        return {
+            "d_cross": self.d_cross,
+            "d_model": self.d_model,
+            "num_heads": self.num_heads,
+            "num_x_features": self.num_x_features,
+            "dff": self.dff,
+        }
 
     def call(self, latents, inputs, xdiff_cross, training=False, mask=None):
         
@@ -328,7 +363,7 @@ class XdiffCrossEncoderLayer(tf.keras.layers.Layer):
         
     
 class XdiffPerciever(tf.keras.layers.Layer):
-    def __init__(self, num_outputs, num_layers, num_repeats, latents_per_x, d_cross, d_model, num_heads, dff, dff_final, share_weights=False, 
+    def __init__(self, num_outputs, num_layers, num_repeats, d_cross, d_model, num_heads, dff, dff_final, share_weights=False, 
                  activation='gelu', kernel_scale=None, dropout_rate=0.1, K=10, scale=1.0, K_input=10):
         super().__init__()
         self.num_outputs = num_outputs
@@ -337,7 +372,6 @@ class XdiffPerciever(tf.keras.layers.Layer):
         self.d_cross = d_cross
         self.d_model = d_model
         self.num_heads = num_heads
-        self.latents_per_x = latents_per_x
         
         self.dff = dff
         self.dff_final = dff_final
@@ -355,10 +389,8 @@ class XdiffPerciever(tf.keras.layers.Layer):
         
         self.kernel_initializer = tf.keras.initializers.VarianceScaling(scale=kernel_scale, mode='fan_avg', distribution='uniform') # scaled Glorot uniform
 
-        self.x_token = self.add_weight(name='x_token', shape=(latents_per_x, d_model), dtype=tf.float32, trainable=True, 
+        self.x_token = self.add_weight(name='x_token', shape=(1, d_model), dtype=tf.float32, trainable=True, 
                                        initializer=tf.keras.initializers.RandomNormal(stddev=kernel_scale)) # (d_model)
-        
-        #self.x_token_layer = XTokenLayer(d_model)
         
         num_x_features = 2*K + 1
         self.enc_layers = [[XdiffEncoderLayer(d_model, num_heads, num_x_features, dff, activation=activation, 
@@ -376,11 +408,9 @@ class XdiffPerciever(tf.keras.layers.Layer):
             "num_outputs": self.num_outputs,
             "num_layers": self.num_layers,
             "num_repeats": self.num_repeats,
-            "d_model": self.d_model,
             "d_cross": self.d_cross,
+            "d_model": self.d_model,
             "num_heads": self.num_heads,
-            "num_repeats": self.num_repeats,
-            "latents_per_x": self.latents_per_x,
             "dff": self.dff,
             "dff_final": self.dff_final,
             "dropout_rate": self.dropout_rate,
@@ -393,7 +423,6 @@ class XdiffPerciever(tf.keras.layers.Layer):
             x_token = tf.repeat(tf.expand_dims(x_token, axis=-3), shape, axis=-3) # (..., latent_size, d_model)
         x_token = tf.repeat(x_token, tf.shape(x)[-2], axis=0)
         
-        x_outputs = tf.repeat(x, self.latents_per_x, axis=-2)
         xdiff = get_xdiff(x, x, self.scale, self.K) # (..., latent_size, latent_size, x_features)
         xdiff_cross = get_xdiff(x, x_inputs, self.scale, self.K) # (..., latent_size, input_size, x_features)
         

@@ -21,7 +21,7 @@ default: &default
   dataset_validate:
     <<: *default-dataset_train
     run_name: validate_dataset
-    max_batch_size: 1
+    max_batch_size: 10
 
   model: &default-model
     class: quantumflow.xdiff.XdiffPerciever_KineticEnergyDensityFunctional    

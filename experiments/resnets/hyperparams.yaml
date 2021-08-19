@@ -32,9 +32,10 @@ resnet_100: &resnet_100
       - kinetic_energy_density
       - derivative
 
-  dataset_validate:
+  dataset_validate: &resnet_100-dataset_validate
     <<: *resnet_100-dataset_train
     run_name: validate_dataset
+    max_batch_size: null
 
   model: &resnet_100-model
     class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
@@ -119,7 +120,7 @@ resnet_100_no_deriv: &resnet_100_no_deriv
       - kinetic_energy_density
 
   dataset_validate:
-    <<: *resnet_100_no_deriv-dataset_train
+    <<: [*resnet_100-dataset_validate, *resnet_100_no_deriv-dataset_train]
     run_name: validate_dataset
 
   model: 
@@ -138,84 +139,9 @@ resnet_100_no_deriv: &resnet_100_no_deriv
     kinetic_energy_density: 1.0
     
     
-resnet_xdiff_compare:
-  <<: *resnet_100_no_deriv
-  
-  fit: 
-    <<: *resnet_100-fit
-    batch_size: 1
-    epochs: 1000
-    validation_freq: 100  # epochs
-
-  checkpoint: 
-    <<: *resnet_100-checkpoint
-    save_freq: 2000000 # batches
-
-  tensorboard: 
-    <<: *resnet_100-tensorboard
-    histogram_freq: 100 # epochs
-    metrics_freq: 1 # epochs
+resnet_100_slow:
+  <<: *resnet_100
     
-    
-resnet_xdiff_compare_2:
-  <<: *resnet_100_no_deriv
-  
-  optimizer: 
-    <<: *resnet_100-optimizer
-    learning_rate: 
-      <<: *resnet_100-optimizer-learning_rate
-      initial_learning_rate: 0.0001
-      final_learning_rate: 0.0000000001
-      decay_rate: 0.9
-      decay_steps: 100000 # batches
-
-      cold_steps: 2180000 # batches
-      warmup_steps: 0 # batches
-      cold_factor: 1.0
-      
-  fit: 
-    <<: *resnet_100-fit
-    batch_size: 1
-    epochs: 100000
-    validation_freq: 10000  # epochs
-
-  tensorboard: 
-    <<: *resnet_100-tensorboard
-    histogram_freq: 10000 # epochs
-    metrics_freq: 100 # epochs
-    
-    
-resnet_xdiff_compare_3:
-  <<: *resnet_100_no_deriv
-  
-  optimizer: 
-    <<: *resnet_100-optimizer
-    learning_rate: 
-      <<: *resnet_100-optimizer-learning_rate
-      initial_learning_rate: 0.0001
-      final_learning_rate: 0.0000000001
-      decay_rate: 0.9
-      decay_steps: 10000 # batches
-
-      cold_steps: 218000 # batches
-      warmup_steps: 0 # batches
-      cold_factor: 1.0
-      
-  fit: 
-    <<: *resnet_100-fit
-    batch_size: 1
-    epochs: 10000
-    validation_freq: 1000  # epochs
-
-  tensorboard: 
-    <<: *resnet_100-tensorboard
-    histogram_freq: 1000 # epochs
-    metrics_freq: 10 # epochs
-    
-    
-resnet_xdiff_compare_4:
-  <<: *resnet_100_no_deriv
-  
   optimizer: 
     <<: *resnet_100-optimizer
     learning_rate: 
@@ -228,32 +154,55 @@ resnet_xdiff_compare_4:
       cold_steps: 218000 # batches
       warmup_steps: 0 # batches
       cold_factor: 1.0
-      
+  
   fit: 
     <<: *resnet_100-fit
     batch_size: 1
     epochs: 10000
     validation_freq: 1000  # epochs
-
+      
+  checkpoint: 
+    <<: *resnet_100-checkpoint
+    save_freq: 200000 # batches
+    
   tensorboard: 
     <<: *resnet_100-tensorboard
     histogram_freq: 1000 # epochs
     metrics_freq: 10 # epochs
     
-resnet_xdiff_compare_derivative:
-  <<: *resnet_100
+    
+resnet_100_no_deriv_slow:
+  <<: [*resnet_100, *resnet_100_no_deriv]
+    
+  optimizer: 
+    <<: *resnet_100-optimizer
+    learning_rate: 
+      <<: *resnet_100-optimizer-learning_rate
+      initial_learning_rate: 0.00001
+      final_learning_rate: 0.00000000001
+      decay_rate: 0.9
+      decay_steps: 10000 # batches
+
+      cold_steps: 218000 # batches
+      warmup_steps: 0 # batches
+      cold_factor: 1.0
   
   fit: 
     <<: *resnet_100-fit
     batch_size: 1
-    epochs: 1000
-    validation_freq: 100  # epochs
-
+    epochs: 10000
+    validation_freq: 1000  # epochs
+      
+  checkpoint: 
+    <<: *resnet_100-checkpoint
+    save_freq: 200000 # batches
+    
   tensorboard: 
     <<: *resnet_100-tensorboard
-    histogram_freq: 100 # epochs
-    metrics_freq: 1 # epochs
+    histogram_freq: 1000 # epochs
+    metrics_freq: 10 # epochs
 
+    
 
 resnet_100000:
   <<: *resnet_100

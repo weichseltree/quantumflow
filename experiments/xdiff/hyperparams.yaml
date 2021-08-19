@@ -169,5 +169,5 @@ default_slow: &default_slow
     
     
 derivative_slow: 
-  <<: [*derivative, *default_slow]
+  <<: [*default_slow, *derivative]
     

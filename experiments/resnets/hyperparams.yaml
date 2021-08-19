@@ -120,7 +120,7 @@ resnet_100_no_deriv: &resnet_100_no_deriv
       - kinetic_energy_density
 
   dataset_validate:
-    <<: [*resnet_100-dataset_validate, *resnet_100_no_deriv-dataset_train]
+    <<: [*resnet_100_no_deriv-dataset_train, *resnet_100-dataset_validate]
     run_name: validate_dataset
 
   model: 
@@ -172,7 +172,7 @@ resnet_100_slow:
     
     
 resnet_100_no_deriv_slow:
-  <<: [*resnet_100, *resnet_100_no_deriv]
+  <<: [*resnet_100_no_deriv, *resnet_100]
     
   optimizer: 
     <<: *resnet_100-optimizer

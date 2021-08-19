@@ -1,5 +1,6 @@
 default: &default
   seed: 0
+  save: True
 
   dataset_train: &default-dataset_train
     class: quantumflow.noninteracting_1d.DensityKineticEnergyDataset
@@ -20,20 +21,24 @@ default: &default
   dataset_validate:
     <<: *default-dataset_train
     run_name: validate_dataset
+    max_batch_size: 1
 
   model: &default-model
-    class: quantumflow.xdiff.XdiffTransformer_KineticEnergyDensityFunctional
-    num_layers: 8
-    d_model: 64
-    dff_input: [64, 128]
-    dff: 128
-    dff_final: [128, 64]
+    class: quantumflow.xdiff.XdiffPerciever_KineticEnergyDensityFunctional    
+    num_layers: 0
+    num_repeats: 8
+    d_model: 128
+    d_cross: 64
     num_heads: 8
+    
+    dff: 128
+    dff_final: [64]
+    
     dropout_rate: 0.0
     scale: 1.0
-    activation: 'softplus'
-    subsample_inputs: 10
-
+    
+    K: 5
+    K_input: 3
 
   metrics: 
     kinetic_energy: mean_absolute_error
@@ -93,54 +98,12 @@ default: &default
     update_freq: epoch
     profile_batch: [10, 20]
 
-  save: True
 
-
-default_10:
+derivative: &derivative
   <<: *default
+  save_model: base_model
   
-  fit: 
-    <<: *default-fit
-    batch_size: 10
-    epochs: 10000
-    validation_freq: 1000  # epochs
-    
-  tensorboard: 
-    <<: *default-tensorboard
-    histogram_freq: 1000 # epochs
-    metrics_freq: 10 # epochs
-
-
-default_while:
-  <<: *default
-  
-  model:
-    <<: *default-model
-    num_layers: 8
-    d_model: 64
-    dff: 128
-    dff_final: [128, 64]
-    num_heads: 8
-    
-    subsample_inputs: 1
-    loop: False
-    
-  fit: 
-    <<: *default-fit
-    batch_size: 100
-    epochs: 10000
-    validation_freq: 1000  # epochs
-    
-  tensorboard: 
-    <<: *default-tensorboard
-    histogram_freq: 1000 # epochs
-    metrics_freq: 10 # epochs
-    
-    
-default_deriv:
-  <<: *default
-  
-  dataset_train: &default_deriv-dataset_train
+  dataset_train: &derivative-dataset_train
     <<: *default-dataset_train
     targets: 
       - kinetic_energy
@@ -148,87 +111,14 @@ default_deriv:
       - derivative
       
   dataset_validate:
-    <<: *default_deriv-dataset_train
+    <<: *derivative-dataset_train
     run_name: validate_dataset
+    max_batch_size: 1
 
   model:
     class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
     base_model:
       <<: *default-model
-      
-  metrics: 
-    kinetic_energy: mean_absolute_error
-    kinetic_energy_density: mean_absolute_error
-    derivative: mean_absolute_error
-
-  loss: 
-    kinetic_energy: mean_squared_error
-    kinetic_energy_density: mean_squared_error
-    derivative: mean_squared_error
-
-  loss_weights:
-    kinetic_energy: 0
-    kinetic_energy_density: 1.0
-    derivative: 10.0
-
-
-########################################################################
-
-datasets/train: &datasets_train
-  class: quantumflow.noninteracting_1d.Non1D_QFDataset
-  filename: 'dataset.hdf5'
-
-  potentials: &datasets_train-potentials
-    class: quantumflow.noninteracting_1d.PotentialDataset
-    discretisation_points: 101
-    interval_length: 1.0
-    n_gauss: 3
-    a_minmax: [0.0, 10.0]
-    b_minmax: [0.4, 0.6]
-    c_minmax: [0.03, 0.1]
-    n_method: 'sum'
-    
-  seed: 0
-  N: 4
-  dtype: 'float64'
-  dataset_size: 100000
-  generate_batch_size: 10000
-  numerov_init_slope: 5.0
-
-
-datasets/train_small:
-  <<: *datasets_train
-  seed: 0
-  dataset_size: 100
-
-
-datasets/validate:
-  <<: *datasets_train
-  seed: -1
-  dataset_size: 1000
-
-
-default_full: &default_full
-  <<: *default
-  
-  dataset_train: &default_full-dataset_train
-    <<: *default-dataset_train
-    experiment: xdiff
-    run_name: datasets/train_small
-    targets: 
-      - kinetic_energy
-      - kinetic_energy_density
-      - derivative
-      
-  dataset_validate:
-    <<: *default_full-dataset_train
-    run_name: datasets/validate
-
-  model:
-    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
-    base_model:
-      <<: *default-model
-      subsample_inputs: 1
       
   metrics: 
     kinetic_energy: mean_absolute_error
@@ -244,80 +134,3 @@ default_full: &default_full
     kinetic_energy: 0
     kinetic_energy_density: 1.0
     derivative: 1.0
-    
-    
-default_full_xdiff_fix:
-  <<: *default_full
-
-
-default_full_wide:
-  <<: *default_full
-  
-  model:
-    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
-    base_model:
-      <<: *default-model
-      subsample_inputs: 1
-      
-      num_layers: 12
-      d_model: 128
-      dff: 128
-      dff_final: [128, 64]
-      num_heads: 8
-      
-      
-default_2:
-  <<: *default
-      
-default_lamb:
-  <<: *default
-
-
-default_full_batch:
-  <<: *default_full
-  
-  fit: 
-    <<: *default-fit
-    batch_size: 100
-    epochs: 100000
-    validation_freq: 10000  # epochs
-
-  tensorboard: 
-    <<: *default-tensorboard
-    histogram_freq: 10000 # epochs
-    metrics_freq: 100 # epochs
-
-
-default_full_lr:
-  <<: *default_full
-  
-  optimizer: 
-    <<: *default-optimizer
-
-    learning_rate: 
-      <<: *default-optimizer-learning_rate
-      initial_learning_rate: 0.00001
-      final_learning_rate: 0.0000000001
-      decay_rate: 0.9
-      decay_steps: 1000 # batches
-
-      cold_steps: 21800 # batches
-      warmup_steps: 0 # batches
-      cold_factor: 1.0
-
-
-default_full_lamb:
-  <<: *default_full
-
-  optimizer:
-    class: quantumflow.utils.LAMB
-    beta_1: 0.9
-    beta_2: 0.999
-    epsilon: 1e-6
-    weight_decay_rate: 0.0
-
-    clipnorm: 100.0
-
-    learning_rate: 
-      <<: *default-optimizer-learning_rate
-

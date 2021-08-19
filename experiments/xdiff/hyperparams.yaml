@@ -134,3 +134,40 @@ derivative: &derivative
     kinetic_energy: 0
     kinetic_energy_density: 1.0
     derivative: 1.0
+
+
+default_slow: &default_slow
+  <<: *default
+    
+  optimizer: 
+    <<: *default-optimizer
+    learning_rate: 
+      <<: *default-optimizer-learning_rate
+      initial_learning_rate: 0.00001
+      final_learning_rate: 0.00000000001
+      decay_rate: 0.9
+      decay_steps: 10000 # batches
+
+      cold_steps: 218000 # batches
+      warmup_steps: 0 # batches
+      cold_factor: 1.0
+  
+  fit: 
+    <<: *default-fit
+    batch_size: 1
+    epochs: 10000
+    validation_freq: 1000  # epochs
+      
+  checkpoint: 
+    <<: *default-checkpoint
+    save_freq: 200000 # batches
+    
+  tensorboard: 
+    <<: *default-tensorboard
+    histogram_freq: 1000 # epochs
+    metrics_freq: 10 # epochs
+    
+    
+derivative_slow: 
+  <<: [*derivative, *default_slow]
+    

@@ -21,7 +21,7 @@ default: &default
   dataset_validate:
     <<: *default-dataset_train
     run_name: validate_dataset
-    max_batch_size: 10
+    max_batch_size: 1
 
   model: &default-model
     class: quantumflow.xdiff.XdiffPerciever_KineticEnergyDensityFunctional    
@@ -97,6 +97,34 @@ default: &default
     write_images: True
     update_freq: epoch
     profile_batch: [10, 20]
+    
+    
+default_more_K:
+   <<: *default
+   model:
+     <<: *default-model
+      K: 6
+      K_input: 4
+
+
+default_deeper:
+   <<: *default
+   model:
+     <<: *default-model
+      num_layers: 0
+      num_repeats: 12
+      d_model: 128
+      d_cross: 64
+      num_heads: 8
+    
+      dff: 128
+      dff_final: [64]
+    
+      dropout_rate: 0.0
+      scale: 1.0
+    
+      K: 5
+      K_input: 3
 
 
 derivative: &derivative

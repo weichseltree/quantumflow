@@ -100,31 +100,31 @@ default: &default
     
     
 default_more_K:
-   <<: *default
-   model:
-     <<: *default-model
-      K: 6
-      K_input: 4
+  <<: *default
+  model:
+    <<: *default-model
+    K: 6
+    K_input: 4
 
 
 default_deeper:
-   <<: *default
-   model:
-     <<: *default-model
-      num_layers: 0
-      num_repeats: 12
-      d_model: 128
-      d_cross: 64
-      num_heads: 8
+  <<: *default
+  model:
+    <<: *default-model
+    num_layers: 0
+    num_repeats: 12
+    d_model: 128
+    d_cross: 64
+    num_heads: 8
     
-      dff: 128
-      dff_final: [64]
+    dff: 128
+    dff_final: [64]
     
-      dropout_rate: 0.0
-      scale: 1.0
+    dropout_rate: 0.0
+    scale: 1.0
     
-      K: 5
-      K_input: 3
+    K: 5
+    K_input: 3
 
 
 derivative: &derivative

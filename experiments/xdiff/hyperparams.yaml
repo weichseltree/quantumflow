@@ -107,6 +107,21 @@ default_more_K:
     K_input: 4
 
 
+default_moore_K:
+  <<: *default
+  model:
+    <<: *default-model
+    K: 8
+    K_input: 6
+    
+
+default_more_layers:
+  <<: *default
+  model:
+    <<: *default-model
+    num_layers: 1
+    
+
 default_deeper:
   <<: *default
   model:

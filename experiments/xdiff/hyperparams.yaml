@@ -115,6 +115,19 @@ default_moore_K:
     K_input: 6
     
 
+default_moore_K_LAMB:
+  <<: *default
+  
+  optimizer: 
+    <<: *default-optimizer
+    class: quantumflow.utils.LAMB
+  
+  model:
+    <<: *default-model
+    K: 8
+    K_input: 6
+    
+
 default_more_layers:
   <<: *default
   model:

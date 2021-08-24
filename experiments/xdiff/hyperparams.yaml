@@ -60,7 +60,7 @@ default: &default
     beta_1: 0.9
     beta_2: 0.999
     epsilon: 1e-07
-    amsgrad: False
+    #amsgrad: False
 
     clipnorm: 100.0
 

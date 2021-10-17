@@ -55,7 +55,7 @@ def calculate_system_properties(potential, wavefunctions, energies, N, h):
     return density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density, derivative, vW_kinetic_energy, vW_kinetic_energy_density, vW_derivative
 
 
-class DensityKineticEnergyDataset(quantumflow.QFDataset):
+class DensityKineticEnergyDataset(quantumflow.Dataset):
 
     def __init__(self, experiment, run_name, N, dtype, features, targets, subtract_von_weizsaecker, **kwargs):
         super().__init__(**kwargs)

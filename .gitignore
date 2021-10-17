@@ -108,4 +108,4 @@ venv.bak/
 .idea
 
 experiments/*/*
-!experiments/**/hyperparams.yaml
+!experiments/**/*.yaml

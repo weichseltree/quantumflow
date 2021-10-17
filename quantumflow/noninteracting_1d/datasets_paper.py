@@ -25,7 +25,7 @@ def calculate_potentials(a, b, c,
 
         return potential, x, h
 
-class TXTPotentialDataset(quantumflow.QFDataset):
+class TXTPotentialDataset(quantumflow.Dataset):
 
     def __init__(self, filename, **kwargs):
         super().__init__(**kwargs)
@@ -33,7 +33,7 @@ class TXTPotentialDataset(quantumflow.QFDataset):
         self.kwargs = kwargs
 
     def build(self):
-        paper_coeff = pd.read_csv(os.path.join(self.run_dir, self.filename), delimiter=' ')
+        paper_coeff = pd.read_csv(os.path.abspath(os.path.join(self.run_dir, self.filename)), delimiter=' ')
 
         a = paper_coeff[['a1', 'a2', 'a3']].values[:, np.newaxis, :]
         c = paper_coeff[['b1', 'b2', 'b3']].values[:, np.newaxis, :] # b<->c listed wrong in the paper

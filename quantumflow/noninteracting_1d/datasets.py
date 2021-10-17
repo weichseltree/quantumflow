@@ -89,7 +89,7 @@ def load_dataset(directory, filename):
     return x, h, potential, wavefunctions, energies
 
 
-class PotentialDataset(quantumflow.QFDataset):
+class PotentialDataset(quantumflow.Dataset):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.kwargs = kwargs
@@ -101,7 +101,7 @@ class PotentialDataset(quantumflow.QFDataset):
             **self.kwargs)
 
 
-class Non1D_QFDataset(quantumflow.QFDataset):
+class Non1D_QFDataset(quantumflow.Dataset):
     def __init__(self, filename, seed, dataset_size, generate_batch_size, N, numerov_init_slope, dtype, potentials, **kwargs):
         super().__init__(**kwargs)
         self.filename = filename

@@ -71,7 +71,7 @@ class DensityKineticEnergyDataset(quantumflow.Dataset):
     def build(self, force=False):
 
         dataset_base_dir = os.path.abspath(os.path.join(self.run_dir, '../..', self.experiment))
-        dataset_params = quantumflow.utils.load_yaml(os.path.join(dataset_base_dir, 'hyperparams.yaml'))[self.run_name]
+        dataset_params = quantumflow.utils.load_yaml(os.path.join(dataset_base_dir, f'{self.experiment}.yaml'))[self.run_name]
         dataset_run_dir = os.path.join(dataset_base_dir, self.run_name)
         
         dataset = quantumflow.instantiate(dataset_params, run_dir=dataset_run_dir)

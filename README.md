@@ -16,7 +16,7 @@ pandas
 
 ## Clean Notebooks
 
-In order to keep notebooks in this project small and clean, there is a script to remove output data from the .ipynb files. Add this filter by running the following command inside the repository:
+In order to keep notebooks in this project small and clean, there is a script to remove output data from the .ipynb files. Add this filter by running the following commands inside the repository:
 
 ```
 git config filter.clean_notebook.clean $PWD/clean_notebook.py

@@ -38,10 +38,17 @@ default: &default
       dff_final: [64]
     
       dropout_rate: 0.0
-      scale: 1.0
+      
+      exponent: 2
+      dampening: 3
     
-      K: 10
+      K_xdiff: 10
+      scale_xdiff: 1.0
+      res_xdiff: 0.01
+      
       K_input: 6
+      scale_input: 10
+      res_input: 0.1
 
   metrics: 
     kinetic_energy: mean_absolute_error

@@ -140,6 +140,8 @@ class DensityKineticEnergyDataset(quantumflow.Dataset):
 
         for target in self.targets_names:
             add_by_name(self.targets, target)
+            
+        return self
 
     def visualize(self, preview=5, figsize=(20, 3), dpi=None):
         import matplotlib.pyplot as plt

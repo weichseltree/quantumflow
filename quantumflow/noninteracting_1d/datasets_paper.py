@@ -40,3 +40,5 @@ class TXTPotentialDataset(quantumflow.Dataset):
         b = paper_coeff[['c1', 'c2', 'c3']].values[:, np.newaxis, :]
 
         self.potential, self.x, self.h = calculate_potentials(a, b, c, **self.kwargs)
+        
+        return self

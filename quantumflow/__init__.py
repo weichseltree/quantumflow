@@ -1,3 +1,4 @@
+import os
 import sys
 import importlib
 
@@ -34,18 +35,12 @@ def reraise(exc_type, exc_value, exc_traceback=None):
     raise exc_value from None
 
     
-class Dataset():
-    def __init__(self, run_dir, **kwargs):
-        self.run_dir = run_dir
-
-    def build(self, force=False):
-        pass
-
-    def visualize(self):
-        pass
-
-    def iter(self):
-        raise NotImplementedError()
-
-
+from .definitions import Dataset
 from . import utils
+
+
+def get_run_dir_and_params(project_path, experiment, run_name):
+    base_dir = os.path.join(project_path, "experiments", experiment)
+    params = utils.load_yaml(os.path.join(base_dir, f'{experiment}.yaml'))[run_name]
+    run_dir = os.path.join(base_dir, run_name)
+    return run_dir, params

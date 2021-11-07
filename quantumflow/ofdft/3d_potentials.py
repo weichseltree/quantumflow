@@ -6,3 +6,5 @@ e = 1.602176634e-19 # C
 
 def coulomb_potential(r, Z=1, ): # (...)
     return
+
+# (dataset_size, points_per_output, 1,)

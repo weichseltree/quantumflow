@@ -166,6 +166,8 @@ class Non1D_QFDataset(quantumflow.Dataset):
         else:
             print(f"Loading built dataset from {os.path.join(self.run_dir, self.filename)}")
             self.x, self.h, self.potential, self.wavefunctions, self.energies = load_dataset(self.run_dir, self.filename)
+    
+        return self
 
     def visualize(self, preview=5, figsize=(20, 3), dpi=None):
         import matplotlib.pyplot as plt

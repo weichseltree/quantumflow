@@ -12,7 +12,14 @@ class KineticEnergyFunctionalDerivativeModel(tf.keras.Model):
         self.output_names = sorted(['derivative'] + self.base_model.output_names)
         self.input_names = self.base_model.input_names
 
-    @tf.function
+    @property 
+    def debug(self):
+        return self.base_model.debug
+    
+    @debug.setter
+    def debug(self, value):
+        self.base_model.debug = value
+    
     def call(self, density):
         density = tf.nest.flatten(density)
 
@@ -20,7 +27,7 @@ class KineticEnergyFunctionalDerivativeModel(tf.keras.Model):
             tape.watch(density)
             outputs = self.base_model(density)
 
-        outputs['derivative'] = tf.identity(1/self.h*tape.gradient(outputs['kinetic_energy'], density)[0], name='derivative')
+        outputs['derivative'] = tf.identity(1 / self.h * tape.gradient(outputs['kinetic_energy'], density)[0], name='derivative')
         return outputs
 
     def _set_output_attrs(self, outputs):

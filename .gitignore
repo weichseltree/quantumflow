@@ -107,6 +107,9 @@ venv.bak/
 # PyCharm
 .idea
 
+# Visual Studio Code
+*.code-workspace
+
 # large files
 experiments/*/*
 !experiments/**/.gitignore

@@ -17,9 +17,9 @@ resnet_100: &resnet_100
   seed: 0
 
   dataset_train: &resnet_100-dataset_train
-    class: quantumflow.noninteracting_1d.DensityKineticEnergyDataset
-    experiment: snyder_2012
-    run_name: recreate_dataset
+    class: quantumflow.snyder_2012.DensityKineticEnergyDataset
+    dataset: snyder_2012
+    run_name: recreate
     N: 2
     dtype: float32
     subtract_von_weizsaecker: True
@@ -34,13 +34,13 @@ resnet_100: &resnet_100
 
   dataset_validate: &resnet_100-dataset_validate
     <<: *resnet_100-dataset_train
-    run_name: validate_dataset
+    run_name: validate
     max_batch_size: null
 
   model: &resnet_100-model
-    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
+    class: quantumflow.snyder_2012.KineticEnergyFunctionalDerivativeModel
     base_model: &resnet_100-model-base_model
-      class: quantumflow.noninteracting_1d.ResNet_KineticEnergyDensityFunctional
+      class: quantumflow.snyder_2012.ResNet_KineticEnergyDensityFunctional
       l2_regularisation: 0.00025
 
       blocks: 
@@ -121,7 +121,7 @@ resnet_100_no_deriv: &resnet_100_no_deriv
 
   dataset_validate:
     <<: [*resnet_100_no_deriv-dataset_train, *resnet_100-dataset_validate]
-    run_name: validate_dataset
+    run_name: validate
 
   model: 
     <<: *resnet_100-model-base_model
@@ -207,11 +207,11 @@ resnet_100000:
   
   dataset_train:
     <<: *resnet_100-dataset_train
-    run_name: train_dataset
+    run_name: train
 
   dataset_validate:
     <<: *resnet_100-dataset_train
-    run_name: validate_dataset
+    run_name: validate
 
   model:
     <<: *resnet_100-model
@@ -264,7 +264,7 @@ fixup_100:
     <<: *resnet_100-model
     base_model:
       <<: *resnet_100-model-base_model
-      class: quantumflow.noninteracting_1d.FixupResNet_KineticEnergyDensityFunctional
+      class: quantumflow.snyder_2012.FixupResNet_KineticEnergyDensityFunctional
       l2_regularisation: 0.00025
       fixup_m: 3
       

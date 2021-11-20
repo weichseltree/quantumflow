@@ -1,10 +1,8 @@
 import tensorflow as tf
 import numpy as np
-
 import quantumflow
 
 from .transformer import XdiffPerciever
-from quantumflow.noninteracting_1d import IntegrateLayer
 
 
 class XLayer(tf.keras.layers.Layer):
@@ -25,19 +23,6 @@ class XLayer(tf.keras.layers.Layer):
     
     def get_config(self):
         return {"subsample_inputs": self.subsample_inputs}
-
-    
-class DebugModel(tf.keras.Model):
-    
-    @property
-    def debug(self):
-        return False
-    
-    @debug.setter
-    def debug(self, value):
-        for layer in self.layers:
-            if hasattr(layer, 'debug'):
-                layer.debug = True
                 
     
 def XdiffPerciever_KineticEnergyDensityFunctional(run_dir, dataset, **kwargs):    
@@ -49,6 +34,6 @@ def XdiffPerciever_KineticEnergyDensityFunctional(run_dir, dataset, **kwargs):
     value = XdiffPerciever(num_outputs=1, **kwargs)(x, x_inputs, inputs)
     
     kinetic_energy_density = tf.keras.layers.Lambda(lambda x: tf.reduce_sum(x[..., 0], axis=-1), name='kinetic_energy_density')(value)
-    kinetic_energy = IntegrateLayer(dataset.h, name='kinetic_energy')(kinetic_energy_density)
+    kinetic_energy = quantumflow.layers.TrapezoidalIntegral1D(dataset.h, name='kinetic_energy')(kinetic_energy_density)
     
-    return DebugModel(inputs={'density': density}, outputs={'kinetic_energy': kinetic_energy, 'kinetic_energy_density': kinetic_energy_density})
+    return quantumflow.Model(inputs={'density': density}, outputs={'kinetic_energy': kinetic_energy, 'kinetic_energy_density': kinetic_energy_density})

@@ -35,8 +35,9 @@ def reraise(exc_type, exc_value, exc_traceback=None):
     raise exc_value from None
 
     
-from .definitions import Dataset
 from . import utils
+from . import layers
+from .definitions import Dataset, Model
 from .__main__ import build_dataset
 
 

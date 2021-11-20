@@ -4,9 +4,9 @@ default: &default
   save_model: base_model
 
   dataset_train: &default-dataset_train
-    class: quantumflow.noninteracting_1d.DensityKineticEnergyDataset
-    experiment: snyder_2012
-    run_name: recreate_dataset
+    class: quantumflow.snyder_2012.DensityKineticEnergyDataset
+    dataset: snyder_2012
+    run_name: recreate
     N: 2
     dtype: float32
     subtract_von_weizsaecker: True
@@ -21,11 +21,11 @@ default: &default
 
   dataset_validate:
     <<: *default-dataset_train
-    run_name: validate_dataset
+    run_name: validate
     max_batch_size: 1
 
   model: &default-model
-    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
+    class: quantumflow.snyder_2012.KineticEnergyFunctionalDerivativeModel
     base_model:
       class: quantumflow.xdiff.XdiffPerciever_KineticEnergyDensityFunctional    
       num_layers: 0

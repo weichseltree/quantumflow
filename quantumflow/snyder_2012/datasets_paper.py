@@ -5,25 +5,26 @@ import tensorflow as tf
 
 import quantumflow
 
-def calculate_potentials(a, b, c, 
-                         discretisation_points=500, 
+
+def calculate_potentials(a, b, c,
+                         discretisation_points=500,
                          interval_length=1.0,
                          dtype='float64',
                          **kwargs):
-    
-        a = tf.cast(a, dtype)
-        b = tf.cast(b, dtype)
-        c = tf.cast(c, dtype)
+    a = tf.cast(a, dtype)
+    b = tf.cast(b, dtype)
+    c = tf.cast(c, dtype)
 
-        x = tf.linspace(tf.constant(0.0, dtype=dtype), interval_length, discretisation_points)
+    x = tf.linspace(tf.constant(0.0, dtype=dtype), interval_length, discretisation_points)
 
-        curves = -tf.square(tf.expand_dims(tf.expand_dims(x, 0), 2) - b)/(2*tf.square(c))
-        curves = -a*tf.exp(curves)
+    curves = -tf.square(tf.expand_dims(tf.expand_dims(x, 0), 2) - b) / (2 * tf.square(c))
+    curves = -a * tf.exp(curves)
 
-        potential = tf.reduce_sum(curves, -1)
-        h = tf.cast(interval_length/(discretisation_points-1), dtype=dtype) # discretisation interval
+    potential = tf.reduce_sum(curves, -1)
+    h = tf.cast(interval_length / (discretisation_points - 1), dtype=dtype) # discretisation interval
 
-        return potential, x, h
+    return potential, x, h
+
 
 class TXTPotentialDataset(quantumflow.Dataset):
 

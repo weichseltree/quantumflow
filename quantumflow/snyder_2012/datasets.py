@@ -3,18 +3,19 @@ import numpy as np
 import os
 
 import quantumflow
-import quantumflow.noninteracting_1d
+import quantumflow.snyder_2012
+
 
 @tf.function
 def generate_potentials(return_x=False,
                         return_h=False,
-                        dataset_size=100, 
-                        discretisation_points=500, 
-                        n_gauss=3, 
+                        dataset_size=100,
+                        discretisation_points=500,
+                        n_gauss=3,
                         interval_length=1.0,
-                        a_minmax=(0.0, 10.0), 
-                        b_minmax=(0.4, 0.6), 
-                        c_minmax=(0.03, 0.1), 
+                        a_minmax=(0.0, 10.0),
+                        b_minmax=(0.4, 0.6),
+                        c_minmax=(0.03, 0.1),
                         n_method='mean',
                         dtype='float64',
                         **kwargs):
@@ -29,11 +30,11 @@ def generate_potentials(return_x=False,
     x = tf.linspace(tf.constant(0.0, dtype=dtype), interval_length, discretisation_points, name="x")
 
     a = tf.random.uniform((dataset_size, 1, n_gauss), minval=a_minmax[0], maxval=a_minmax[1], dtype=dtype, name="a")
-    b = tf.random.uniform((dataset_size, 1, n_gauss), minval=b_minmax[0]*interval_length, maxval=b_minmax[1]*interval_length, dtype=dtype, name="b")
-    c = tf.random.uniform((dataset_size, 1, n_gauss), minval=c_minmax[0]*interval_length, maxval=c_minmax[1]*interval_length, dtype=dtype, name="c")
+    b = tf.random.uniform((dataset_size, 1, n_gauss), minval=b_minmax[0] * interval_length, maxval=b_minmax[1] * interval_length, dtype=dtype, name="b")
+    c = tf.random.uniform((dataset_size, 1, n_gauss), minval=c_minmax[0] * interval_length, maxval=c_minmax[1] * interval_length, dtype=dtype, name="c")
 
-    curves = -tf.square(tf.expand_dims(tf.expand_dims(x, 0), 2) - b)/(2*tf.square(c))
-    curves = -a*tf.exp(curves)
+    curves = -tf.square(tf.expand_dims(tf.expand_dims(x, 0), 2) - b) / (2 * tf.square(c))
+    curves = -a * tf.exp(curves)
 
     if n_method == 'sum':
         potentials = tf.reduce_sum(curves, -1, name="potentials")
@@ -48,27 +49,28 @@ def generate_potentials(return_x=False,
         returns += [x]
     
     if return_h:
-        h = tf.cast(interval_length/(discretisation_points-1), dtype=dtype) # discretisation interval
+        h = tf.cast(interval_length / (discretisation_points - 1), dtype=dtype) # discretisation interval
         returns += [h]
    
     return returns
 
+
 def save_dataset(directory, filename, x, h, potential, wavefunctions, energies):
-        if filename.endswith('.pickle') or filename.endswith('.pkl'):
-            import pickle
-            with open(os.path.join(directory, filename), 'wb') as f:
-                pickle.dump({'x': x, 'h': h, 'potential': potential, 'wavefunctions': wavefunctions, 'energies': energies}, f)
-            
-        elif filename.endswith('.hdf5') or filename.endswith('.h5'):
-            import h5py
-            with h5py.File(os.path.join(directory, filename), "w") as f:
-                f.attrs['x'] = x
-                f.attrs['h'] = h
-                f.create_dataset('potential', data=potential, compression="gzip")
-                f.create_dataset('wavefunctions', data=wavefunctions, compression="gzip")
-                f.create_dataset('energies', data=energies, compression="gzip")
-        else:
-            raise KeyError(f"Unknown format {filename} to save dataset.")
+    if filename.endswith('.pickle') or filename.endswith('.pkl'):
+        import pickle
+        with open(os.path.join(directory, filename), 'wb') as f:
+            pickle.dump({'x': x, 'h': h, 'potential': potential, 'wavefunctions': wavefunctions, 'energies': energies}, f)
+
+    elif filename.endswith('.hdf5') or filename.endswith('.h5'):
+        import h5py
+        with h5py.File(os.path.join(directory, filename), "w") as f:
+            f.attrs['x'] = x
+            f.attrs['h'] = h
+            f.create_dataset('potential', data=potential, compression="gzip")
+            f.create_dataset('wavefunctions', data=wavefunctions, compression="gzip")
+            f.create_dataset('energies', data=energies, compression="gzip")
+    else:
+        raise KeyError(f"Unknown format {filename} to save dataset.")
 
 
 def load_dataset(directory, filename):
@@ -96,7 +98,7 @@ class PotentialDataset(quantumflow.Dataset):
 
     def build(self):
         self.potential, self.x, self.h = generate_potentials(
-            return_x=True, 
+            return_x=True,
             return_h=True,
             **self.kwargs)
 
@@ -114,7 +116,6 @@ class Non1D_QFDataset(quantumflow.Dataset):
         self.dtype = dtype
 
         self.potential_generator = quantumflow.instantiate(potentials, dataset_size=self.dataset_size, dtype=self.dtype, **kwargs)
-    
         
     def build(self, force=False):
         if force or not os.path.isfile(os.path.join(self.run_dir, self.filename)):
@@ -123,7 +124,7 @@ class Non1D_QFDataset(quantumflow.Dataset):
             tf.random.set_seed(self.seed)
             self.potential_generator.build()
 
-            potential, x, h = self.potential_generator.potential, self.potential_generator.x, self.potential_generator.h 
+            potential, x, h = self.potential_generator.potential, self.potential_generator.x, self.potential_generator.h
 
             self.x = x.numpy()
             self.h = h.numpy()
@@ -132,12 +133,12 @@ class Non1D_QFDataset(quantumflow.Dataset):
             energies_batches = []
             wavefunctions_batches = []
 
-            for i in range(self.dataset_size//self.generate_batch_size):
-                energies, wavefunctions = quantumflow.noninteracting_1d.solve_schroedinger(
-                    potential[i*self.generate_batch_size:(i+1)*self.generate_batch_size], 
-                    self.N, 
-                    h, 
-                    self.dtype, 
+            for i in range(self.dataset_size // self.generate_batch_size):
+                energies, wavefunctions = quantumflow.snyder_2012.solve_schroedinger(
+                    potential[i * self.generate_batch_size:(i + 1) * self.generate_batch_size],
+                    self.N,
+                    h,
+                    self.dtype,
                     self.numerov_init_slope
                     )
 
@@ -145,11 +146,11 @@ class Non1D_QFDataset(quantumflow.Dataset):
                 wavefunctions_batches.append(wavefunctions.numpy())
 
             if self.dataset_size % self.generate_batch_size:
-                energies, wavefunctions = quantumflow.noninteracting_1d.solve_schroedinger(
-                    potential[(self.dataset_size//self.generate_batch_size)*self.generate_batch_size:], 
-                    self.N, 
-                    h, 
-                    self.dtype, 
+                energies, wavefunctions = quantumflow.snyder_2012.solve_schroedinger(
+                    potential[(self.dataset_size // self.generate_batch_size) * self.generate_batch_size:],
+                    self.N,
+                    h,
+                    self.dtype,
                     self.numerov_init_slope
                     )
 
@@ -180,8 +181,8 @@ class Non1D_QFDataset(quantumflow.Dataset):
         plt.grid(which='major', axis='y', linestyle='--')
         plt.show()
 
-
-        #----------------------------
+        # ----------------------------
+        
         plt.figure(figsize=figsize, dpi=dpi)
         for i, plot in enumerate(self.wavefunctions[:preview]):
             plt.plot(self.x, plot, 'C' + str(i%10))
@@ -189,15 +190,16 @@ class Non1D_QFDataset(quantumflow.Dataset):
         plt.title('Wavefunctions - Numerov Solutions')
         plt.show()
 
-        #----------------------------
-        fig, axs = plt.subplots(1, preview, figsize=(figsize[0], figsize[1]*2), dpi=dpi)
+        # ----------------------------
+        
+        fig, axs = plt.subplots(1, preview, figsize=(figsize[0], figsize[1] * 2), dpi=dpi)
 
         for i, plot in enumerate(self.wavefunctions[:preview]**2 + self.energies[:preview, np.newaxis, :]):
             for n, plot_single in enumerate(plot.transpose()):
                 axs[i].plot(self.x, self.potential[i], 'k')
-                axs[i].plot(self.x, np.ones(self.x.shape)*self.energies[i, n], ':k')
-                axs[i].plot(self.x, plot_single, 'C' + str(i%10))
-                axs[i].set_ylim([np.min(self.potential[:preview]), max(np.max(self.energies[:preview]*1.1), 0.5)])
+                axs[i].plot(self.x, np.ones(self.x.shape) * self.energies[i, n], ':k')
+                axs[i].plot(self.x, plot_single, 'C' + str(i % 10))
+                axs[i].set_ylim([np.min(self.potential[:preview]), max(np.max(self.energies[:preview] * 1.1), 0.5)])
                 if i == 0: 
                     axs[i].set_ylabel('energies, potential / hartree')
                     axs[i].set_xlabel("x / bohr")
@@ -206,15 +208,14 @@ class Non1D_QFDataset(quantumflow.Dataset):
         fig.suptitle('Energies and Densities')
         plt.show()
 
-
-        #-------------------------------
+        # -------------------------------
 
         plt.figure(figsize=figsize, dpi=dpi)
         bins = np.linspace(min(self.energies.flatten()), max(self.energies.flatten()), 100)
 
         for i in range(self.energies.shape[1]):
-            color = i/(self.energies.shape[1] - 1)
-            plt.hist(self.energies[:, i], bins, alpha=0.7, color=[0.8*color**2, 0.8*(1-color)**2, 1.6*color*(1-color)], label= f"{i}-th solution")
+            color = i / (self.energies.shape[1] - 1)
+            plt.hist(self.energies[:, i], bins, alpha=0.7, color=[0.8 * color**2, 0.8 * (1 - color)**2, 1.6 * color * (1 - color)], label= f"{i}-th solution")
 
         plt.xlabel('split energy / hartree')
         plt.ylabel('count')

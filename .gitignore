@@ -104,8 +104,15 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-#PyCharm
+# PyCharm
 .idea
 
+# large files
 experiments/*/*
+!experiments/**/.gitignore
 !experiments/**/*.yaml
+
+datasets/*/*
+!datasets/**/.gitignore
+!datasets/**/*.yaml
+!datasets/**/README.md

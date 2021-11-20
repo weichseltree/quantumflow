@@ -37,10 +37,22 @@ def reraise(exc_type, exc_value, exc_traceback=None):
     
 from .definitions import Dataset
 from . import utils
+from .__main__ import build_dataset
 
 
-def get_run_dir_and_params(project_path, experiment, run_name):
-    base_dir = os.path.join(project_path, "experiments", experiment)
-    params = utils.load_yaml(os.path.join(base_dir, f'{experiment}.yaml'))[run_name]
-    run_dir = os.path.join(base_dir, run_name)
-    return run_dir, params
+def get_experiment_dir_and_params(experiment, run_name):
+    project_path = os.path.abspath(os.path.join(os.path.dirname(utils.__file__), '../../'))
+    run_dir = os.path.join(project_path, "experiments", experiment, run_name)
+    params_file = os.path.join(project_path, 'experiments', experiment, f'{experiment}.yaml')
+    all_params = utils.load_yaml(params_file)
+    assert run_name in all_params, f"Couldn't find entry {run_name} in {params_file}. \npossible entries are: {list(all_params.keys())}."
+    return run_dir, all_params[run_name]
+
+
+def get_dataset_dir_and_params(dataset, run_name):
+    project_path = os.path.abspath(os.path.join(os.path.dirname(utils.__file__), '../../'))
+    run_dir = os.path.join(project_path, "datasets", dataset, run_name)
+    params_file = os.path.join(project_path, 'datasets', dataset, f'{dataset}.yaml')
+    all_params = utils.load_yaml(params_file)
+    assert run_name in all_params, f"Couldn't find entry {run_name} in {params_file}. \npossible entries are: {list(all_params.keys())}."
+    return run_dir, all_params[run_name]

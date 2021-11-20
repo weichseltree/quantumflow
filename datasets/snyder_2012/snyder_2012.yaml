@@ -1,10 +1,10 @@
-recreate_dataset: &recreate_dataset
-  class: quantumflow.noninteracting_1d.Non1D_QFDataset
+recreate: &recreate
+  class: quantumflow.snyder_2012.Non1D_QFDataset
   filename: 'dataset.hdf5'
 
-  potentials: &recreate_dataset-potentials
-    class: quantumflow.noninteracting_1d.TXTPotentialDataset
-    filename: '../paper_potentials.txt'
+  potentials: &recreate-potentials
+    class: quantumflow.snyder_2012.TXTPotentialDataset
+    filename: 'paper_potentials.txt'
     discretisation_points: 500
     interval_length: 1.0
     
@@ -17,19 +17,19 @@ recreate_dataset: &recreate_dataset
   
   
 recreate_sample:
-  <<: *recreate_dataset
+  <<: *recreate
   potentials:
-    <<: *recreate_dataset-potentials
-    filename: '../paper_sample_potential.txt'
+    <<: *recreate-potentials
+    filename: 'sample_potential.txt'
   dataset_size: 1
   
 
-train_dataset: &train_dataset
-  class: quantumflow.noninteracting_1d.Non1D_QFDataset
+train: &train
+  class: quantumflow.snyder_2012.Non1D_QFDataset
   filename: 'dataset.hdf5'
 
-  potentials: &train_dataset-potentials
-    class: quantumflow.noninteracting_1d.PotentialDataset
+  potentials: &train-potentials
+    class: quantumflow.snyder_2012.PotentialDataset
     discretisation_points: 500
     interval_length: 1.0
     n_gauss: 3
@@ -46,8 +46,8 @@ train_dataset: &train_dataset
   numerov_init_slope: 5.0
 
 
-validate_dataset: 
-  <<: *train_dataset
+validate: 
+  <<: *train
   seed: -1
   dataset_size: 1000
 

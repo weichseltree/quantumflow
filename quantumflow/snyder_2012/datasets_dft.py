@@ -1,12 +1,11 @@
 import tensorflow as tf
 import numpy as np
-import os
 
 import quantumflow
 
 
 def weizsaecker_pseudo_integrand(pseudo, h):
-    return 1/2*tf.square(quantumflow.utils.derivative_five_point(pseudo, h))
+    return 1 / 2 * tf.square(quantumflow.utils.derivative_five_point(pseudo, h))
 
 
 def weizsaecker_pseudo_functional(pseudo, h):
@@ -21,9 +20,9 @@ def calculate_density_and_energies(potential, wavefunctions, energies, N, h):
     assert(N <= wavefunctions.shape[2])
     density = np.sum(np.square(wavefunctions)[:, :, :N], axis=-1)
 
-    kinetic_energy_densities = 0.5*quantumflow.utils.derivative_five_point(wavefunctions, h)**2 # == -0.5*wavefunctions*laplace_five_point(wavefunctions)
+    kinetic_energy_densities = 0.5 * quantumflow.utils.derivative_five_point(wavefunctions, h)**2 # == -0.5*wavefunctions*laplace_five_point(wavefunctions)
     
-    potential_energy_densities = np.expand_dims(potential, axis=2)*wavefunctions**2
+    potential_energy_densities = np.expand_dims(potential, axis=2) * wavefunctions**2
     
     potential_energies = quantumflow.utils.np_integrate(potential_energy_densities, h)
     kinetic_energies = quantumflow.utils.np_integrate(kinetic_energy_densities, h)
@@ -42,14 +41,14 @@ def calculate_system_properties(potential, wavefunctions, energies, N, h):
     assert(N <= wavefunctions.shape[2])
 
     density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density = calculate_density_and_energies(potential, wavefunctions, energies, N, h)
-    derivative = np.expand_dims(energy/N, axis=1) - potential
+    derivative = np.expand_dims(energy / N, axis=1) - potential
 
     pseudo = np.sqrt(density)
     vW_kinetic_energy_density = weizsaecker_pseudo_integrand(pseudo, h).numpy()
     vW_kinetic_energy = weizsaecker_pseudo_functional(pseudo, h).numpy()
     vW_pseudo_derivative = weizsaecker_pseudo_functional_derivative(pseudo, h).numpy()
     
-    vW_derivative = vW_pseudo_derivative[:, 1:-1]/(2*pseudo[:, 1:-1])
+    vW_derivative = vW_pseudo_derivative[:, 1:-1] / (2 * pseudo[:, 1:-1])
     vW_derivative = np.concatenate([vW_derivative[:, 0:1], vW_derivative, vW_derivative[:, -1:]], axis=1)
 
     return density, energy, potential_energy, kinetic_energy, potential_energy_density, kinetic_energy_density, derivative, vW_kinetic_energy, vW_kinetic_energy_density, vW_derivative
@@ -57,9 +56,9 @@ def calculate_system_properties(potential, wavefunctions, energies, N, h):
 
 class DensityKineticEnergyDataset(quantumflow.Dataset):
 
-    def __init__(self, experiment, run_name, N, dtype, features, targets, subtract_von_weizsaecker, **kwargs):
+    def __init__(self, dataset, run_name, N, dtype, features, targets, subtract_von_weizsaecker, **kwargs):
         super().__init__(**kwargs)
-        self.experiment = experiment
+        self.dataset = dataset
         self.run_name = run_name
 
         self.N = N
@@ -69,14 +68,8 @@ class DensityKineticEnergyDataset(quantumflow.Dataset):
         self.subtract_von_weizsaecker = subtract_von_weizsaecker
 
     def build(self, force=False):
-
-        dataset_base_dir = os.path.abspath(os.path.join(self.run_dir, '../..', self.experiment))
-        dataset_params = quantumflow.utils.load_yaml(os.path.join(dataset_base_dir, f'{self.experiment}.yaml'))[self.run_name]
-        dataset_run_dir = os.path.join(dataset_base_dir, self.run_name)
+        dataset = quantumflow.build_dataset(self.dataset, self.run_name)
         
-        dataset = quantumflow.instantiate(dataset_params, run_dir=dataset_run_dir)
-        dataset.build()
-
         potential = dataset.potential
         wavefunctions = dataset.wavefunctions
         energies = dataset.energies
@@ -154,7 +147,7 @@ class DensityKineticEnergyDataset(quantumflow.Dataset):
         plt.grid(which='major', axis='y', linestyle='--')
         plt.show()
 
-        #----------------------------
+        # ----------------------------
        
         plt.figure(figsize=figsize, dpi=dpi)
         plt.plot(self.x, np.transpose(self.kinetic_energy_density)[:, :preview]) # only plot first potentials
@@ -164,8 +157,7 @@ class DensityKineticEnergyDataset(quantumflow.Dataset):
         plt.grid(which='major', axis='y', linestyle='--')
         plt.show()
 
-        
-        #----------------------------
+        # ----------------------------
        
         plt.figure(figsize=figsize, dpi=dpi)
         plt.plot(self.x, np.transpose(self.derivative)[:, :preview]) # only plot first potentials

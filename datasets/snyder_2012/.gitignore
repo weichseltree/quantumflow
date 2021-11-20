@@ -1,0 +1,8 @@
+!recreate/
+recreate/*
+!recreate/paper_potentials.txt
+
+!recreate_sample
+recreate_sample/*
+!recreate_sample/sample_potential.txt
+!recreate_sample/sample_potential.png

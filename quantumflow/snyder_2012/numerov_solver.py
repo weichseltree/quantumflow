@@ -1,6 +1,7 @@
 import tensorflow as tf
 from quantumflow.utils import integrate
 
+
 # recurrent tensorflow cell for solving the numerov equation recursively
 class ShootingNumerovCell(tf.keras.layers.AbstractRNNCell):
     def __init__(self, shape, h, **kwargs):
@@ -26,6 +27,7 @@ class ShootingNumerovCell(tf.keras.layers.AbstractRNNCell):
 
         new_state = tf.stack([k_m1, inputs, y_m1, y], axis=-1)
         return y, new_state
+
 
 # tf function for using the shooting numerov method
 #
@@ -93,6 +95,7 @@ def find_split_energies(potentials, N, h, dtype, numerov_init_slope):
 
 def detect_roots(array):
     return tf.logical_or(tf.equal(array[:, 1:], 0), array[:, 1:] * array[:, :-1] < 0)
+
 
 @tf.function
 def solve_numerov(potentials, target_roots, split_energies, h, numerov_init_slope, dtype):

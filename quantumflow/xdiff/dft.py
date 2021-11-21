@@ -25,7 +25,7 @@ class XLayer(tf.keras.layers.Layer):
         return {"subsample_inputs": self.subsample_inputs}
                 
     
-def XdiffPerciever_KineticEnergyDensityFunctional(run_dir, dataset, **kwargs):    
+def XdiffPerciever_KineticEnergyDensityFunctional(run_dir, dataset, **kwargs):
     density = tf.keras.layers.Input(shape=dataset.density.shape[1:], name='density')
     
     x, x_inputs, inputs = XLayer(dataset, subsample_inputs=1)(density)

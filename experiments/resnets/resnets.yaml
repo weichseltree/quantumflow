@@ -87,7 +87,6 @@ resnet_100: &resnet_100
   fit: &resnet_100-fit
     batch_size: 100
     epochs: 100000
-    verbose: 0
     #validation_split: 0.1
     validation_freq: 10000  # epochs
     shuffle: True

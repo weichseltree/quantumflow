@@ -88,7 +88,6 @@ default: &default
   fit: &default-fit
     batch_size: 1
     epochs: 10000
-    verbose: 0
     #validation_split: 0.1
     validation_freq: 1000  # epochs
     shuffle: True
@@ -106,5 +105,5 @@ default: &default
     write_graph: True
     write_images: True
     update_freq: epoch
-    profile_batch: [10, 20]
+    profile_batch: 0
 

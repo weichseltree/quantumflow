@@ -39,18 +39,19 @@ def check_dir_exists(directory):
     if not os.path.exists(directory):
         raise FileNotFoundError("The provided directory '{}' does not exist.".format(directory))
 
-
-def ensure_dir(file_path):
-    directory = os.path.dirname(file_path)
+        
+def ensure_dir(file_path, is_directory=False):
+    directory = os.path.dirname(file_path) if not is_directory else file_path
     if not os.path.exists(directory):
         os.makedirs(directory, exist_ok=True)
     return file_path
-
+    
     
 from . import utils
 from . import layers
 from .definitions import Dataset, Model
 from .__main__ import build_dataset, train_model
+
 
 def get_experiment_dir_and_params(experiment, run_name):
     project_path = os.path.abspath(os.path.join(os.path.dirname(utils.__file__), '../../'))

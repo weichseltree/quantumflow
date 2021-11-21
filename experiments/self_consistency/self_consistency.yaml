@@ -1,31 +1,51 @@
 default: &DEFAULT
-    model: null
-    model_dtype: float32
+  dataset_train: &resnet_100-dataset_train
+    class: quantumflow.snyder_2012.DensityKineticEnergyDataset
+    dataset: snyder_2012
+    run_name: recreate
+    N: 2
+    dtype: float32
+    subtract_von_weizsaecker: True
 
-    dataset: datasets/dataset_test.hdf5
-    train_dataset: datasets/dataset_paper.hdf5
-    batch_size: 100
+    features: 
+      - density
 
-    N: 1
-    dtype: float64
-    model_subtract_von_weizsaecker: False
-    model_pseudo_wavefunction: False
+    targets: 
+      - kinetic_energy
+      - kinetic_energy_density
+      - derivative
 
-    initial_density: mean # mean, zeroV
+  dataset_validate: &resnet_100-dataset_validate
+    <<: *resnet_100-dataset_train
+    run_name: validate
+    
+  model: null
+  model_dtype: float32
 
-    iterations: 10000
-    step_size:  0.0001
-    pseudo_wavefunction: False
-    project_functional_derivative: null
-    project: null
+  max_batch_size: null
 
-    record_filename: 'recordings.hdf5'
-    record_M: 1 # per batch
-    record: 
-        value: 100
-        model_derivative: 100
-        vW_derivative: 100
-        functional_derivative: 100
+  batch_size: 100
+
+  N: 1
+  dtype: float64
+  model_subtract_von_weizsaecker: False
+  model_pseudo_wavefunction: False
+
+  initial_density: mean # mean, zeroV
+
+  iterations: 10000
+  step_size:  0.0001
+  pseudo_wavefunction: False
+  project_functional_derivative: null
+  project: null
+
+  record_filename: 'recordings.hdf5'
+  record_M: 1 # per batch
+  record: 
+    value: 100
+    model_derivative: 100
+    vW_derivative: 100
+    functional_derivative: 100
 
 pca: &PCA
     pseudo_wavefunction: False

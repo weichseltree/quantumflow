@@ -1,0 +1,30 @@
+3GD: &3GD
+  class: quantumflow.snyder_2012.Non1D_QFDataset
+  filename: 'dataset.hdf5'
+
+  potentials: &3GD-potentials
+    class: quantumflow.snyder_2012.PotentialDataset
+    discretisation_points: 500
+    interval_length: 1.0
+    n_gauss: 3
+    a_minmax: [0.0, 10.0]
+    b_minmax: [0.4, 0.6]
+    c_minmax: [0.03, 0.1]
+    n_method: 'sum'
+    
+  seed: -1
+  N: 5
+  dtype: 'float64'
+  dataset_size: 1000
+  generate_batch_size: 10000
+  numerov_init_slope: 5.0
+
+
+PiB: 
+  <<: *3GD
+  seed: 0
+  dataset_size: 1000
+  potentials: 
+    <<: *3GD-potentials
+    a_minmax: [0.0, 0.0]
+    # TODO: variate L !

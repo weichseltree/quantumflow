@@ -1,42 +1,10 @@
-datasets/3GD: &3GD_dataset
-  class: quantumflow.noninteracting_1d.Non1D_QFDataset
-  filename: 'dataset.hdf5'
-
-  potentials: &3GD_dataset-potentials
-    class: quantumflow.noninteracting_1d.PotentialDataset
-    discretisation_points: 500
-    interval_length: 1.0
-    n_gauss: 3
-    a_minmax: [0.0, 10.0]
-    b_minmax: [0.4, 0.6]
-    c_minmax: [0.03, 0.1]
-    n_method: 'sum'
-    
-  seed: -1
-  N: 5
-  dtype: 'float64'
-  dataset_size: 1000
-  generate_batch_size: 10000
-  numerov_init_slope: 5.0
-
-
-datasets/PiB: 
-  <<: *3GD_dataset
-  seed: 0
-  dataset_size: 1000
-  potentials: 
-    <<: *3GD_dataset-potentials
-    a_minmax: [0.0, 0.0]
-    # TODO: variate L !
-
-
 recreate: &recreate
   seed: 0
 
   dataset_train: &recreate-dataset_train
-    class: quantumflow.noninteracting_1d.DensityKineticEnergyDataset
-    experiment: alghadeer_2021
-    run_name: datasets/3GD
+    class: quantumflow.snyder_2012.DensityKineticEnergyDataset
+    dataset: alghadeer_2021
+    run_name: 3GD
     N: 'all'
     dtype: float64
     subtract_von_weizsaecker: False
@@ -49,12 +17,12 @@ recreate: &recreate
 
   dataset_validate:
     <<: *recreate-dataset_train
-    run_name: datasets/3GD
+    run_name: 3GD
 
   model: &recreate-model
-    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
+    class: quantumflow.snyder_2012.KineticEnergyFunctionalDerivativeModel
     base_model: &recreate-model-base_model
-      class: quantumflow.noninteracting_1d.ResNet_KineticEnergyDensityFunctional
+      class: quantumflow.snyder_2012.ResNet_KineticEnergyDensityFunctional
       l2_regularisation: 0.00025
 
 

@@ -78,9 +78,21 @@ fifteen notebooks showed up as modified by their own stored output — about
 4,300 lines of it. `clean_notebook.py` is stdlib-only now, so it does not break
 when the interpreter changes.
 
-## Branches
+## Branches — read this before cloning
 
-`feature/sin_cos` holds the last six commits — the sin/cos coordinate embedding,
-the hydrogen wavefunctions, the `alghadeer_2021` dataset — and `main` has been
-fast-forwarded onto it. Both point at the same commit; the branch is kept
-because the commit messages refer to it.
+**`feature/sin_cos` is the physics, not `main`.** It carries the last six 2021
+commits: the sin/cos coordinate embedding, the hydrogen wavefunctions, the
+`datasets/` split and the `alghadeer_2021` dataset.
+
+`main` — which is the repo's default branch on GitHub, so it is what a clone
+gives you — forked away from the physics at `4d7b723` (2021-10-17) and has two
+commits on top of it, both labelled "backup", both from 2025-07-20. They are
+unrelated material parked here for want of a better home: `points.jl`,
+`points.ipynb` and `fractals.jl` (the ancestor of the separate `points`
+project), plus notebooks on relative coordinates and biologically plausible
+backpropagation.
+
+The two lines cannot be fast-forwarded onto each other and merging them would
+put Julia point clouds in a DFT repo, so they are left diverged and labelled
+here instead. Nothing is lost either way: each line's work is reachable from its
+own branch.

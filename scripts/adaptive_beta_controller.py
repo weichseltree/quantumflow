@@ -76,7 +76,12 @@ def score_population(seed_metrics: dict[int, dict]) -> float:
 def find_record(name: str) -> tuple[Path, dict] | None:
     records = []
     for path in (Path.home() / ".exp_status").glob("*.json"):
-        record = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(record, dict):
+            continue
         if record.get("name") == name and "status" in record:
             records.append((path, record))
     return max(records, key=lambda item: item[0].name) if records else None

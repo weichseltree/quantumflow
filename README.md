@@ -1,23 +1,49 @@
 # QuantumFlow
 
-## Installation
-This project can be run locally or on the cloud in Google Colab. To install, download the repository to your computer or into Google Drive. The default folder inside Google Drive is **Colab Projects/QuantumFlow**. If you want to save it in any other folder you will have to change the variable `project_path` in the first code cell in every notebooks to your path.
+Research tooling for QuantumFlow and orbital-free density-functional-theory experiments.
 
-Some notebooks are best set to use a GPU instance in Google Colab. Every notebook will need create its own VM to run in, so make sure to close unused sessions via Runtime->Manage Sessions.
+## Layout
 
-The required python packages are:
+| Path | Purpose |
+| --- | --- |
+| `quantumflow/` | Reusable Python package and experiment CLI. |
+| `experiments/` | Versioned YAML configurations and small input fixtures. |
+| `notebooks/` | Exploratory analysis notebooks. |
+| `scripts/` | Backward-compatible wrappers for the installed CLI. |
+| `outputs/` | Generated datasets, checkpoints, and model exports (ignored by Git). |
 
+## Setup
+
+Python 3.10 or newer is required. Create an environment and install the package with its
+developer tools:
+
+```bash
+python -m venv .venv
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
 ```
-tensorboard>=2.0.0
-matplotlib
-ruamel.yaml
-pandas
+
+Run the fast validation suite with `python -m pytest`, and lint source files with
+`python -m ruff check quantumflow scripts tests`.
+
+## Running experiments
+
+Configurations live under `experiments/<experiment>/` and may use either
+`hyperparams.yaml` or a single descriptive YAML file. Run artifacts are written under
+`outputs/<experiment>/<run-name>/` by default:
+
+```bash
+quantumflow-dataset snyder_2012 recreate_dataset
+quantumflow-train resnets resnet_100 --output-dir /path/to/results
 ```
 
-## Clean Notebooks
+The legacy `scripts/generate_dataset.py` and `scripts/train_network.py` commands remain
+available and accept the same arguments.
 
-In order to keep notebooks in this project small and clean, there is a script to remove output data from the .ipynb files. Add this filter by running the following commands inside the repository:
+## Clean notebooks
 
-```
-git config filter.clean_notebook.clean $PWD/clean_notebook.py
+To strip cell outputs when notebooks are committed, configure the repository-local filter:
+
+```bash
+git config filter.notebook-clean.clean "python clean_notebook.py"
 ```

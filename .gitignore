@@ -104,8 +104,12 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-#PyCharm
+# PyCharm
 .idea
 
+# Local experiment artifacts
+outputs/
 experiments/*/*
 !experiments/**/*.yaml
+!experiments/**/*.txt
+!experiments/**/*.png

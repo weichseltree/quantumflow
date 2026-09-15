@@ -100,5 +100,3 @@ default: &default
     write_images: True
     update_freq: epoch
     profile_batch: [10, 20]
-
-<<: *

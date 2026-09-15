@@ -23,8 +23,18 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-Run the fast validation suite with `python -m pytest`, and lint source files with
-`python -m ruff check quantumflow scripts tests`.
+The active modeling stack is JAX and Optax. Legacy TensorFlow/Keras modules remain available
+only during migration; install `python -m pip install -e ".[legacy-tensorflow]"` when running
+an unreworked legacy experiment.
+
+Run the complete local validation suite before opening a pull request:
+
+```bash
+python -m pip check
+python -m pytest
+python -m ruff check quantumflow/cli.py quantumflow/noninteracting_1d/convex.py tests
+python -m ruff format --check quantumflow/cli.py quantumflow/noninteracting_1d/convex.py tests
+```
 
 ## Running experiments
 
@@ -40,14 +50,42 @@ quantumflow-train resnets resnet_100 --output-dir /path/to/results
 The legacy `scripts/generate_dataset.py` and `scripts/train_network.py` commands remain
 available and accept the same arguments.
 
+### Experiment dashboards
+
+Each invocation has a stable artifact location at
+`outputs/<experiment>/<run-name>/`. Use a unique run name for each trial and pass a common
+`--output-dir` when a dashboard needs to aggregate multiple runs. TensorBoard callbacks in
+an experiment configuration write event files into that same run directory.
+
+ExpDash is not a QuantumFlow dependency. Configure its experiment or TensorBoard connector
+to read the shared output directory, then compare runs by their `experiment/run-name`
+path. Keep configurations, source code, and dashboard metadata in Git; keep checkpoints,
+event logs, and generated datasets in `outputs/`, which is intentionally ignored.
+
+For local inspection without a third-party dashboard:
+
+```bash
+tensorboard --logdir outputs
+```
+
 ### Convex kinetic-energy functional
 
-`experiments/convex_1d/hyperparams.yaml` provides an ICNN-based 1D kinetic-energy
-functional. Its non-negative hidden and output connections and Softplus activations guarantee
-convexity with respect to the discretized density. The functional derivative is obtained with
-automatic differentiation; recover an external potential with
-`potential_from_kinetic_derivative(derivative, chemical_potential)`, implementing
-`v(x) = mu - delta T[n] / delta n(x)`.
+The active convex-functional implementation is JAX-first:
+
+```python
+import jax
+from quantumflow.jax import functional_derivative, init_icnn, kinetic_energy
+
+params = init_icnn(jax.random.key(0), input_size=grid_points)
+energy = kinetic_energy(params, density)
+derivative = functional_derivative(params, density)
+```
+
+Its ICNN parameterization applies non-negative hidden/output connections and Softplus
+activations, guaranteeing convexity with respect to the discretized density. Use
+`potential_from_kinetic_derivative(derivative, chemical_potential)` to implement
+`v(x) = mu - delta T[n] / delta n(x)`. Use `make_training_step(optimizer)` to obtain a
+JIT-compiled update function for a fixed Optax optimizer.
 
 ## Clean notebooks
 

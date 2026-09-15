@@ -136,7 +136,7 @@ def launch_continuation(
     if load_metrics(stage_dir) is not None:
         return
 
-    name = f"adaptive-b{beta_token(beta)}-s{seed}-to{target_steps}"
+    name = f"adaptive-v2-b{beta_token(beta)}-s{seed}-to{target_steps}"
     command = [
         "exp",
         "run",

@@ -2,7 +2,7 @@ import tensorflow as tf
 from quantumflow.utils import integrate
 
 # recurrent tensorflow cell for solving the numerov equation recursively
-class ShootingNumerovCell(tf.keras.layers.AbstractRNNCell):
+class ShootingNumerovCell(tf.keras.layers.Layer):
     def __init__(self, shape, h, **kwargs):
         super(ShootingNumerovCell, self).__init__(autocast=False, **kwargs)
         self._h2_scaled = 1 / 12 * h ** 2

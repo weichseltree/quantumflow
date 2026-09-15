@@ -1,0 +1,39 @@
+convex_100:
+  seed: 0
+  dataset_train: &dataset
+    class: quantumflow.noninteracting_1d.DensityKineticEnergyDataset
+    experiment: snyder_2012
+    run_name: recreate_dataset
+    N: 2
+    dtype: float32
+    subtract_von_weizsaecker: true
+    features: [density]
+    targets: [kinetic_energy, derivative]
+
+  dataset_validate:
+    <<: *dataset
+    run_name: validate_dataset
+
+  model:
+    class: quantumflow.noninteracting_1d.KineticEnergyFunctionalDerivativeModel
+    base_model:
+      class: quantumflow.noninteracting_1d.InputConvexKineticEnergyFunctional
+      hidden_units: [128, 128]
+      l2_regularisation: 0.000001
+
+  loss:
+    kinetic_energy: mean_squared_error
+    derivative: mean_squared_error
+  loss_weights:
+    kinetic_energy: 1.0
+    derivative: 1.0
+  optimizer:
+    class: quantumflow.utils.Adam
+    learning_rate: 0.0001
+  fit:
+    batch_size: 100
+    epochs: 10000
+    verbose: 1
+    validation_freq: 100
+    shuffle: true
+  save: true

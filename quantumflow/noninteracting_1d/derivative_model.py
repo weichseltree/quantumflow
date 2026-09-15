@@ -3,13 +3,18 @@ import tensorflow as tf
 import quantumflow
 
 
+def potential_from_kinetic_derivative(kinetic_derivative, chemical_potential):
+    """Return the external potential from the Euler equation ``v = mu - dT/dn``."""
+    return tf.convert_to_tensor(chemical_potential) - tf.convert_to_tensor(kinetic_derivative)
+
+
 class KineticEnergyFunctionalDerivativeModel(tf.keras.Model):
     def __init__(self, base_model, dataset, run_dir):
         super().__init__()
         self.base_model = quantumflow.instantiate(base_model, dataset=dataset, run_dir=run_dir)
         self.h = tf.constant(dataset.h, dtype=dataset.dtype)
 
-        self.output_names = sorted(['derivative'] + self.base_model.output_names)
+        self.output_names = sorted(["derivative"] + self.base_model.output_names)
         self.input_names = self.base_model.input_names
 
     @tf.function
@@ -20,12 +25,14 @@ class KineticEnergyFunctionalDerivativeModel(tf.keras.Model):
             tape.watch(density)
             outputs = self.base_model(density)
 
-        outputs['derivative'] = tf.identity(1/self.h*tape.gradient(outputs['kinetic_energy'], density)[0], name='derivative')
+        outputs["derivative"] = tf.identity(
+            1 / self.h * tape.gradient(outputs["kinetic_energy"], density)[0], name="derivative"
+        )
         return outputs
 
     def _set_output_attrs(self, outputs):
         super()._set_output_attrs(outputs)
-        self.output_names = sorted(['derivative'] + self.base_model.output_names)
+        self.output_names = sorted(["derivative"] + self.base_model.output_names)
 
     def summary(self, *args, **kwargs):
         return self.base_model.summary(*args, **kwargs)

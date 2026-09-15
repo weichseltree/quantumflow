@@ -32,6 +32,10 @@ def exp_name(beta: float, seed: int, batch_size: int = 256) -> str:
     return f"pilot-b{beta_token(beta)}-s{seed}-bs{batch_size}"
 
 
+def continuation_name(beta: float, seed: int, target_steps: int) -> str:
+    return f"adaptive-v2-b{beta_token(beta)}-s{seed}-to{target_steps}"
+
+
 def load_metrics(directory: Path) -> dict | None:
     path = directory / "metrics.json"
     if not path.is_file() or not (directory / "model.npz").is_file():
@@ -136,7 +140,7 @@ def launch_continuation(
     if load_metrics(stage_dir) is not None:
         return
 
-    name = f"adaptive-v2-b{beta_token(beta)}-s{seed}-to{target_steps}"
+    name = continuation_name(beta, seed, target_steps)
     command = [
         "exp",
         "run",
@@ -203,8 +207,11 @@ def wait_for_population(
             for seed in DEFAULT_SEEDS:
                 if load_metrics(root / run_name(beta, seed)) is not None:
                     continue
-                name = (exp_name(beta, seed) if root == PILOT_DIR else
-                        f"adaptive-b{beta_token(beta)}-s{seed}-to{root.name.split('_')[-1]}")
+                name = (
+                    exp_name(beta, seed)
+                    if root == PILOT_DIR
+                    else continuation_name(beta, seed, int(root.name.split("_")[-1]))
+                )
                 record = find_record(name)
                 if record is not None and record[1]["status"] in (
                     "failed", "error", "cancelled", "canceled", "success"

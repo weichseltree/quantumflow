@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import platform
+import hashlib
 import time
 from pathlib import Path
 
@@ -13,6 +16,7 @@ import numpy as np
 import optax
 
 from quantumflow import expdash
+from quantumflow.checkpoint import load_checkpoint, save_checkpoint
 from quantumflow.ot_cfm import (
     cfm_loss_step,
     compute_eigenvalue_spread,
@@ -38,13 +42,33 @@ def train_and_eval(
     eval_samples: int = 2048,
     fixed_eval_seed: int | None = 1_000_003,
     init_model: Path | None = None,
-    step_offset: int = 0,
+    step_offset: int | None = None,
     sample_offset: int | None = None,
-) -> dict[str, float | list[float] | dict[str, float]]:
+) -> dict:
     if num_steps < 1 or batch_size < 1 or eval_samples < 1:
         raise ValueError("num_steps, batch_size, and eval_samples must be positive")
-    if beta < 0:
-        raise ValueError("beta must be non-negative")
+    if not np.isfinite(beta) or beta < 0 or not np.isfinite(lr) or lr <= 0:
+        raise ValueError("beta must be finite and non-negative; lr must be finite and positive")
+    source_metrics = None
+    if init_model is not None:
+        source_metrics = json.loads(
+            (init_model.parent / "metrics.json").read_text(encoding="utf-8")
+        )
+        for field, expected in (("seed", seed), ("beta", beta), ("batch_size", batch_size)):
+            if source_metrics[field] != expected:
+                raise ValueError(f"Exact continuation requires matching {field}")
+        if source_metrics["config"]["learning_rate"] != lr:
+            raise ValueError("Exact continuation requires matching learning rate")
+        source_steps = source_metrics["end_step"]
+        source_samples = source_metrics["end_samples"]
+        if step_offset is not None and step_offset != source_steps:
+            raise ValueError("step_offset must match parent end_step")
+        if sample_offset is not None and sample_offset != source_samples:
+            raise ValueError("sample_offset must match parent end_samples")
+        step_offset, sample_offset = source_steps, source_samples
+    elif step_offset or sample_offset:
+        raise ValueError("Nonzero offsets require a parent checkpoint")
+    step_offset = step_offset or 0
     if step_offset < 0:
         raise ValueError("step_offset must be non-negative")
     if sample_offset is None:
@@ -56,9 +80,6 @@ def train_and_eval(
     numpy_rng = np.random.default_rng(seed)
     key, subkey = jax.random.split(key)
     params = init_potential_network(subkey, in_dim=2, hidden_dims=(128, 128))
-    if init_model is not None:
-        params = load_model_params(init_model)
-
     optimizer = optax.adam(learning_rate=lr)
     opt_state = optimizer.init(params)
 
@@ -73,22 +94,54 @@ def train_and_eval(
         new_p = optax.apply_updates(p, updates)
         return new_p, new_opt_s, aux
 
-    print(f"Starting training with beta={beta}, num_steps={num_steps}, batch_size={batch_size}")
-    start_time = time.time()
-    for step in range(1, num_steps + 1):
-        key, k_t, k_x0, k_x1 = jax.random.split(key, 4)
+    def advance(p, opt_s, rng_key):
+        next_key, k_t, _, k_x1 = jax.random.split(rng_key, 4)
         t = jax.random.uniform(k_t, (batch_size,))
         x0_raw = numpy_rng.standard_normal((batch_size, 2))
         x1_raw = np.asarray(sample_8gaussians(k_x1, batch_size))
         x0_ot, x1_ot = exact_ot_coupling(x0_raw, x1_raw)
-
-        params, opt_state, aux = update_step(
-            params,
-            opt_state,
-            t,
-            jnp.array(x0_ot, dtype=jnp.float32),
+        new_p, new_opt_s, aux = update_step(
+            p, opt_s, t, jnp.array(x0_ot, dtype=jnp.float32),
             jnp.array(x1_ot, dtype=jnp.float32),
         )
+        return new_p, new_opt_s, next_key, aux
+
+    replay_seconds = 0.0
+    history = []
+    if init_model is not None:
+        checkpoint = init_model.parent / "checkpoint.npz"
+        if checkpoint.is_file():
+            (params, opt_state, key_data), meta = load_checkpoint(
+                checkpoint, (params, opt_state, jax.random.key_data(key))
+            )
+            if meta["end_step"] != step_offset or meta["end_samples"] != sample_offset:
+                raise ValueError("Checkpoint counters disagree with parent metrics")
+            key = jax.random.wrap_key_data(key_data)
+            numpy_rng.bit_generator.state = meta["numpy_rng"]
+        else:
+            # Older pilot runs only saved weights. Recover Adam and RNG state by
+            # exact deterministic replay, inside this job's GPU scheduler lock.
+            replay_start = time.perf_counter()
+            for _ in range(step_offset):
+                params, opt_state, key, _ = advance(params, opt_state, key)
+            saved = load_model_params(init_model)
+            for recovered, original in zip(
+                jax.tree_util.tree_leaves(params), jax.tree_util.tree_leaves(saved), strict=True
+            ):
+                np.testing.assert_allclose(recovered, original, atol=1e-6, rtol=1e-6)
+            replay_seconds = time.perf_counter() - replay_start
+            print(f"Recovered parent optimizer/RNG by verified replay in {replay_seconds:.2f}s")
+        parent_history = init_model.parent / "progress.json"
+        if parent_history.is_file():
+            expdash.resume_history(parent_history)
+            history = json.loads(parent_history.read_text(encoding="utf-8"))["history"]
+        else:
+            raise FileNotFoundError(f"Parent chart history missing: {parent_history}")
+
+    print(f"Starting training with beta={beta}, num_steps={num_steps}, batch_size={batch_size}")
+    start_time = time.time()
+    for step in range(1, num_steps + 1):
+        params, opt_state, key, aux = advance(params, opt_state, key)
 
         if step % 50 == 0 or step == num_steps:
             loss = float(aux["loss"])
@@ -99,6 +152,7 @@ def train_and_eval(
             expdash.report(
                 step=absolute_samples,
                 total=sample_offset + num_steps * batch_size,
+                step_offset=0,
                 loss=loss,
                 loss_cfm=loss_cfm,
                 loss_iso=loss_iso,
@@ -107,12 +161,38 @@ def train_and_eval(
                 samples_seen=absolute_samples,
                 progress_unit="samples",
             )
+            values = {
+                "loss": loss, "loss_cfm": loss_cfm, "loss_iso": loss_iso,
+                "optimizer_step": absolute_optimizer_step, "samples_seen": absolute_samples,
+            }
+            history.append([time.time(), absolute_samples, values])
+            if output_dir:
+                output_dir.mkdir(parents=True, exist_ok=True)
+                progress = {
+                    "history": history, "step": absolute_samples,
+                    "total": sample_offset + num_steps * batch_size,
+                    "values": {**values, "progress_unit": "samples"},
+                }
+                temporary = output_dir / "progress.tmp"
+                temporary.write_text(json.dumps(progress, allow_nan=False), encoding="utf-8")
+                temporary.replace(output_dir / "progress.json")
             print(
                 f"[{step}/{num_steps}] loss: {loss:.5f} "
                 f"(cfm: {loss_cfm:.5f}, iso: {loss_iso:.5f})"
             )
 
     training_seconds = time.time() - start_time
+    if output_dir:
+        save_model_params(params, output_dir / "model.npz")
+        save_checkpoint(
+            output_dir / "checkpoint.npz",
+            (params, opt_state, jax.random.key_data(key)),
+            {
+                "end_step": step_offset + num_steps,
+                "end_samples": sample_offset + num_steps * batch_size,
+                "numpy_rng": numpy_rng.bit_generator.state,
+            },
+        )
     print(f"Training completed in {training_seconds:.2f}s. Evaluating...")
     evaluation_start = time.time()
 
@@ -200,6 +280,7 @@ def train_and_eval(
         "missing_modes": mode_metrics["missing_modes"],
         "mode_counts": mode_metrics["mode_counts"],
         "mode_entropy": mode_metrics["mode_entropy"],
+        "unassigned_samples": mode_metrics["unassigned_samples"],
         "pareto_step_sliced_wasserstein_distance": pareto_sliced,
         "pareto_step_empirical_wasserstein_distance": pareto_w2,
         "ode_function_evaluations": ode_function_evaluations,
@@ -208,14 +289,27 @@ def train_and_eval(
         "training_seconds": training_seconds,
         "evaluation_seconds": evaluation_seconds,
         "elapsed_seconds": training_seconds + evaluation_seconds,
+        "replay_seconds": replay_seconds,
+        "provenance": {
+            "python": platform.python_version(), "jax": jax.__version__,
+            "numpy": np.__version__, "optax": optax.__version__,
+            "device": str(jax.devices()[0]),
+            "exp_name": os.environ.get("EXP_NAME"),
+            "exp_sweep": os.environ.get("EXP_SWEEP"),
+            "source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "evaluation_source_sha256": hashlib.sha256(np.asarray(x0_eval).tobytes()).hexdigest(),
+            "evaluation_target_sha256": hashlib.sha256(
+                np.asarray(target_samples).tobytes()
+            ).hexdigest(),
+        },
     }
 
     if output_dir:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
-        with open(output_path / "metrics.json", "w", encoding="utf-8") as f:
-            json.dump(metrics, f, indent=2)
-        save_model_params(params, output_path / "model.npz")
+        with open(output_path / "metrics.tmp", "w", encoding="utf-8") as f:
+            json.dump(metrics, f, indent=2, allow_nan=False)
+        (output_path / "metrics.tmp").replace(output_path / "metrics.json")
         print(f"Saved metrics to {output_path / 'metrics.json'}")
 
     return metrics
@@ -237,7 +331,7 @@ def main() -> None:
     parser.add_argument(
         "--step-offset",
         type=int,
-        default=0,
+        default=None,
         help="Completed steps before this continuation",
     )
     parser.add_argument(

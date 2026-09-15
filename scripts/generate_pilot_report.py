@@ -1,201 +1,198 @@
-# ruff: noqa: E501
-"""Generate comprehensive statistical tables, markdown summaries, and VR export for the pilot."""
+"""Generate the beta-pilot comparison report and representative gallery."""
 
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
+from typing import Any
 
-from quantumflow.orchard_export import (
-    create_orchard_bundle,
-    export_trajectory_tape,
-    generate_webxr_gallery_html,
-)
-from quantumflow.ot_cfm import load_model_params
+
+def _condition_rows(analysis: dict[str, Any], batch_size: int) -> list[dict[str, Any]]:
+    rows = [
+        summary
+        for summary in analysis["summary_by_condition"].values()
+        if summary["batch_size"] == batch_size
+    ]
+    return sorted(rows, key=lambda summary: summary["beta"])
+
+
+def render_report(analysis: dict[str, Any]) -> str:
+    """Render a concise, cautious comparison table from a validated aggregate."""
+    lines = [
+        "# Isotropic-Hessian OT-CFM beta pilot",
+        "",
+        (
+            "Three paired training seeds per condition; values are mean +/- sample SD. "
+            "Intervals enumerate all paired n-to-n bootstrap resamples. This is exploratory "
+            "small-n inference, conditional on fixed evaluation data/projections and not "
+            "adjusted for multiple comparisons."
+        ),
+        "",
+        "| beta | endpoint empirical W2 | paired delta [95% interval] | "
+        "5-step empirical W2 (paired delta) | missing modes |",
+        "|---:|---:|---:|---:|---:|",
+    ]
+    for summary in _condition_rows(analysis, 256):
+        endpoint = summary["empirical_w2"]
+        low_step = summary["pareto_empirical_w2_statistics"]["5"]
+        if summary["beta"] == 0:
+            delta = "reference"
+        else:
+            lower, upper = endpoint["paired_delta_ci_95"]
+            delta = f"{endpoint['paired_delta_mean']:+.4f} [{lower:+.4f}, {upper:+.4f}]"
+        lines.append(
+            f"| {summary['beta']:g} | {endpoint['mean']:.4f} +/- {endpoint['std']:.4f} | "
+            f"{delta} | {low_step['mean']:.4f} "
+            f"({low_step['paired_delta_mean']:+.4f}) | "
+            f"{summary['missing_modes']['total']} |"
+        )
+
+    promoted = analysis["promoted_candidates"]
+    lines.extend(["", "## Promotion decision", ""])
+    if promoted:
+        values = ", ".join(f"`{candidate['beta']:g}`" for candidate in promoted)
+        lines.append(
+            f"Promoted beta value(s): {values}. Each passed the preregistered endpoint, "
+            "low-step empirical-W2, mode-coverage, and conservative interval gates."
+        )
+    else:
+        lines.append(
+            "No non-zero beta passed every preregistered gate; no beta is promoted. "
+            "The baseline is retained for the representative artifact."
+        )
+    lines.extend(
+        [
+            "",
+            "The machine-readable `pilot_analysis.json` contains labeled seed values and "
+            "paired deltas for endpoint and every ODE step count, full raw metrics, source-run "
+            "provenance, validation design, and the failure reasons for every candidate.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _representative_run(
+    analysis: dict[str, Any],
+    beta: float,
+) -> tuple[str, int]:
+    condition_name = f"bs256_beta_{beta:g}".replace(".", "_")
+    summary = analysis["summary_by_condition"][condition_name]
+    values = summary["empirical_w2"]["values_by_seed"]
+    ordered_seeds = sorted((float(value), int(seed)) for seed, value in values.items())
+    median_seed = ordered_seeds[len(ordered_seeds) // 2][1]
+    return summary["source_runs_by_seed"][str(median_seed)], median_seed
+
+
+def export_representative_gallery(
+    pilot_dir: Path,
+    analysis: dict[str, Any],
+) -> Path:
+    """Export the median-seed promoted run, or the median-seed baseline if none passed."""
+    from quantumflow.orchard_export import (
+        create_orchard_bundle,
+        export_trajectory_tape,
+        generate_webxr_gallery_html,
+    )
+    from quantumflow.ot_cfm import load_model_params
+
+    promoted = analysis["promoted_candidates"]
+    beta = float(promoted[0]["beta"]) if promoted else 0.0
+    selection = "promoted" if promoted else "baseline_no_promotion"
+    run_name, seed = _representative_run(analysis, beta)
+    model_path = pilot_dir / run_name / "model.npz"
+    if not model_path.is_file():
+        raise FileNotFoundError(
+            f"Representative {selection} model is missing: {model_path}"
+        )
+
+    gallery_dir = pilot_dir / "gallery"
+    tape_dir = gallery_dir / "tape"
+    params = load_model_params(model_path)
+    export_trajectory_tape(
+        params,
+        tape_dir,
+        seed=1_000_003,
+        title=f"OT-CFM beta={beta:g}: {selection} median-seed flow",
+        source_run=run_name,
+        source_model=str(model_path.relative_to(pilot_dir)),
+        provenance={
+            "analysis_schema": analysis["schema"],
+            "selection": selection,
+            "representative_seed": seed,
+            "beta": beta,
+        },
+    )
+    generate_webxr_gallery_html(
+        gallery_dir / "index.html",
+        particles_json_rel_path="tape/webxr_particles.json",
+        title=f"QuantumFlow beta={beta:g}",
+    )
+    bundle_dir = create_orchard_bundle(
+        tape_dir,
+        gallery_dir / "bundles",
+        title=f"QuantumFlow OT-CFM beta={beta:g}",
+    )
+    if bundle_dir is None:
+        raise RuntimeError("Official orchard bundle exporter is unavailable")
+    bundle_dir = Path(bundle_dir)
+    if not bundle_dir.is_dir():
+        raise RuntimeError(f"Orchard exporter returned a missing bundle: {bundle_dir}")
+
+    manifest = {
+        "schema": "quantumflow/gallery/2",
+        "source_run": run_name,
+        "source_model": str(model_path.relative_to(pilot_dir)),
+        "representative_seed": seed,
+        "selection": selection,
+        "beta": beta,
+        "webxr": "index.html",
+        "tape": "tape",
+        "orchard_bundle": str(bundle_dir.relative_to(gallery_dir)),
+    }
+    manifest_path = gallery_dir / "gallery.json"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, allow_nan=False),
+        encoding="utf-8",
+    )
+    return manifest_path
 
 
 def generate_reports_and_gallery(
     pilot_dir: Path = Path("outputs/transport/pilot"),
     analysis_file: Path | None = None,
-) -> None:
+    *,
+    export_gallery: bool = True,
+) -> dict[str, Path | None]:
+    """Write the report first, then fail loudly if the requested gallery cannot be built."""
     pilot_dir = Path(pilot_dir)
     analysis_path = analysis_file or (pilot_dir / "pilot_analysis.json")
+    if not analysis_path.is_file():
+        raise FileNotFoundError(f"Pilot analysis not found: {analysis_path}")
+    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+    if analysis.get("schema") != "quantumflow/beta-pilot-analysis/2":
+        raise ValueError(f"Unsupported pilot analysis schema in {analysis_path}")
 
-    if not analysis_path.exists():
-        print(f"Error: {analysis_path} not found.")
-        return
-
-    with open(analysis_path, encoding="utf-8") as f:
-        analysis = json.load(f)
-
-    summaries = analysis["summary_by_condition"]
-    promoted = analysis.get("promoted_candidates", [])
-
-    # 1. Main comparison table (BS=256)
-    md_lines = []
-    md_lines.append("# Isotropic-Hessian OT-CFM Multi-Seed Beta Pilot Results\n")
-    md_lines.append("## Executive Summary")
-    md_lines.append(
-        "Evaluation of isotropic-Hessian penalty $\\beta$ across 10 values, 3 seeds ($N=2048$ fixed evaluation points, 2,000 steps), "
-        "and batch-size ablation (128 vs 256).\n"
+    report_path = pilot_dir / "PILOT_REPORT.md"
+    report_path.write_text(render_report(analysis), encoding="utf-8")
+    gallery_path = (
+        export_representative_gallery(pilot_dir, analysis) if export_gallery else None
     )
-
-    md_lines.append("## Main Benchmark Table (Batch Size = 256, 2,000 Steps, 3 Seeds)")
-    header = (
-        "| $\\beta$ | Empirical $W_2$ | $\\Delta W_2$ vs $\\beta=0$ (95% CI) | Sliced $W_2$ | "
-        "Mean Eig Spread | Missing Modes | Mode Entropy | Wall Time (s) |"
-    )
-    separator = "|---|---|---|---|---|---|---|---|"
-    md_lines.append(header)
-    md_lines.append(separator)
-
-    # Sort conditions by beta
-    bs256_conds = [
-        (k, v) for k, v in summaries.items() if v["batch_size"] == 256
-    ]
-    bs256_conds.sort(key=lambda x: x[1]["beta"])
-
-    for cond_name, s in bs256_conds:
-        b_val = s["beta"]
-        b_str = f"{b_val:g}"
-        w2_mean = s["empirical_w2"]["mean"]
-        w2_std = s["empirical_w2"]["std"]
-        
-        delta_w2 = s["empirical_w2"]["paired_delta_mean"]
-        ci_low, ci_high = s["empirical_w2"]["paired_delta_ci_95"]
-        delta_str = f"{delta_w2:+.4f} [{ci_low:+.4f}, {ci_high:+.4f}]" if b_val > 0 else "0.0000 (ref)"
-        
-        sw2_mean = s["sliced_w2"]["mean"]
-        sw2_std = s["sliced_w2"]["std"]
-        
-        eig_mean = s["mean_eigenvalue_spread"]["mean"]
-        eig_std = s["mean_eigenvalue_spread"]["std"]
-        
-        missing = s["missing_modes"]["total"]
-        entropy = s["mode_entropy"]["mean"]
-        time_s = s["elapsed_seconds"]["mean"]
-
-        row = (
-            f"| `{b_str}` | {w2_mean:.4f} ± {w2_std:.4f} | {delta_str} | "
-            f"{sw2_mean:.4f} ± {sw2_std:.4f} | {eig_mean:.4f} ± {eig_std:.4f} | "
-            f"{missing}/24 | {entropy:.3f} | {time_s:.1f}s |"
-        )
-        md_lines.append(row)
-
-    # 2. Pareto Step Count Table
-    md_lines.append("\n## Integration Step Pareto Analysis (Sliced $W_2$ vs RK4 Steps)")
-    p_header = "| $\\beta$ | 5 steps | 10 steps | 20 steps | 50 steps | 100 steps |"
-    p_sep = "|---|---|---|---|---|---|"
-    md_lines.append(p_header)
-    md_lines.append(p_sep)
-
-    for cond_name, s in bs256_conds:
-        b_str = f"{s['beta']:g}"
-        p = s["pareto_sliced_w2"]
-        md_lines.append(
-            f"| `{b_str}` | {p['5']:.4f} | {p['10']:.4f} | {p['20']:.4f} | "
-            f"{p['50']:.4f} | {p['100']:.4f} |"
-        )
-
-    # 3. Batch-Size Ablation Table (128 vs 256)
-    md_lines.append("\n## Batch Size Ablation (Batch Size 128 vs 256)")
-    ab_header = "| $\\beta$ | BS | Empirical $W_2$ | Sliced $W_2$ (50s) | Sliced $W_2$ (5s) | Mean Eig Spread |"
-    ab_sep = "|---|---|---|---|---|---|"
-    md_lines.append(ab_header)
-    md_lines.append(ab_sep)
-
-    for b in [0.0, 1e-3, 1e-2]:
-        for bs in [128, 256]:
-            cond_key = f"bs{bs}_beta_{b:g}".replace(".", "_")
-            if cond_key in summaries:
-                s = summaries[cond_key]
-                w2 = s["empirical_w2"]["mean"]
-                sw2_50 = s["sliced_w2"]["mean"]
-                sw2_5 = s["pareto_sliced_w2"]["5"]
-                eig = s["mean_eigenvalue_spread"]["mean"]
-                md_lines.append(
-                    f"| `{b:g}` | {bs} | {w2:.4f} | {sw2_50:.4f} | {sw2_5:.4f} | {eig:.4f} |"
-                )
-
-    # 4. Candidate Promotion
-    md_lines.append("\n## Candidate Promotion for Production Run")
-    if promoted:
-        for idx, c in enumerate(promoted, 1):
-            md_lines.append(
-                f"{idx}. **$\\beta = {c['beta']:g}$**:\n"
-                f"   - Paired $\\Delta W_2$: {c['delta_w2']:+.4f} (95% CI: [{c['delta_w2_ci'][0]:+.4f}, {c['delta_w2_ci'][1]:+.4f}])\n"
-                f"   - Low-step (5 steps) Sliced $W_2$ change: {c['delta_low_step_sw2']:+.4f}\n"
-                f"   - Mean Hessian Eigenvalue Spread: {c['mean_eig_spread']:.4f} ($\\Delta$: {c['delta_eig_spread']:+.4f})\n"
-                f"   - Missing modes across all seeds: {c['missing_modes']}.\n"
-            )
-    else:
-        md_lines.append("No non-zero beta significantly outperformed beta=0 across metrics.\n")
-
-    report_content = "\n".join(md_lines)
-    report_file = pilot_dir / "PILOT_REPORT.md"
-    report_file.write_text(report_content, encoding="utf-8")
-    print(f"\nReport written to: {report_file}")
-    print("\n" + report_content)
-
-    raw_path = pilot_dir / "pilot_raw_results.json"
-    if promoted and raw_path.exists():
-        raw_results = json.loads(raw_path.read_text(encoding="utf-8"))
-        promoted_beta = promoted[0]["beta"]
-        eligible = [
-            (name, metrics)
-            for name, metrics in raw_results.items()
-            if metrics["beta"] == promoted_beta and metrics["batch_size"] == 256
-        ]
-        best_name, _ = min(
-            eligible,
-            key=lambda item: item[1]["empirical_wasserstein_distance"],
-        )
-        model_path = pilot_dir / best_name / "model.npz"
-        if model_path.exists():
-            gallery_dir = pilot_dir / "gallery"
-            tape_dir = gallery_dir / "tape"
-            params = load_model_params(model_path)
-            export_trajectory_tape(
-                params,
-                tape_dir,
-                seed=1_000_003,
-                title=f"OT-CFM beta={promoted_beta:g}: promoted pilot flow",
-            )
-            generate_webxr_gallery_html(
-                gallery_dir / "index.html",
-                particles_json_rel_path="tape/webxr_particles.json",
-                title=f"QuantumFlow beta={promoted_beta:g}",
-            )
-            bundle_dir = create_orchard_bundle(
-                tape_dir,
-                gallery_dir / "bundles",
-                title=f"QuantumFlow OT-CFM beta={promoted_beta:g}",
-            )
-            gallery_manifest = {
-                "schema": "quantumflow/gallery/1",
-                "source_run": best_name,
-                "promoted_beta": promoted_beta,
-                "webxr": "index.html",
-                "tape": "tape",
-                "orchard_bundle": str(bundle_dir) if bundle_dir else None,
-            }
-            (gallery_dir / "gallery.json").write_text(
-                json.dumps(gallery_manifest, indent=2),
-                encoding="utf-8",
-            )
+    return {"report": report_path, "gallery_manifest": gallery_path}
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate pilot reports and VR gallery.")
-    parser.add_argument(
-        "--pilot-dir",
-        type=Path,
-        default=Path("outputs/transport/pilot"),
-        help="Pilot results directory",
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--pilot-dir", type=Path, default=Path("outputs/transport/pilot"))
+    parser.add_argument("--analysis-file", type=Path)
+    parser.add_argument("--no-gallery", action="store_true")
     args = parser.parse_args()
-    generate_reports_and_gallery(pilot_dir=args.pilot_dir)
+    generate_reports_and_gallery(
+        args.pilot_dir,
+        args.analysis_file,
+        export_gallery=not args.no_gallery,
+    )
 
 
 if __name__ == "__main__":

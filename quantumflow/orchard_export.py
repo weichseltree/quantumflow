@@ -1,31 +1,52 @@
 # ruff: noqa: E501
-"""Orchard VR Gallery and particle tape export for QuantumFlow transport flows."""
+"""Export QuantumFlow trajectories to Orchard tapes, bundles, and a WebXR viewer."""
 
 from __future__ import annotations
 
+import html
+import importlib
 import json
+import shutil
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+from scipy.spatial.distance import cdist
 
-try:
-    import orchard_tape
-except ImportError:
-    orchard_tape = None
+from quantumflow.ot_cfm import ModelParams, evaluate_potential, integrate_ode, velocity
 
-try:
-    from orchard.bundle import bundle_tape
-except ImportError:
-    bundle_tape = None
+_ASSET_DIR = Path(__file__).with_name("gallery_assets")
+_ASSETS = ("three.module.min.js", "OrbitControls.js", "VRButton.js", "THREE-LICENSE.txt")
 
-from quantumflow.ot_cfm import (
-    ModelParams,
-    evaluate_potential,
-    integrate_ode,
-    velocity,
-)
+
+def _require_module(name: str, purpose: str) -> Any:
+    try:
+        return importlib.import_module(name)
+    except ImportError as exc:
+        raise RuntimeError(
+            f"{purpose} requires the official {name!r} package. "
+            "Install Orchard and orchard-tape in this environment; no fallback format is written."
+        ) from exc
+
+
+def _finite(name: str, value: Any) -> np.ndarray:
+    array = np.asarray(value)
+    if not np.isfinite(array).all():
+        bad = np.argwhere(~np.isfinite(array))[0].tolist()
+        raise ValueError(f"{name} contains a non-finite value at index {bad}")
+    return array
+
+
+def _validated_provenance(provenance: Mapping[str, Any] | None) -> dict[str, Any]:
+    result = dict(provenance or {})
+    try:
+        json.dumps(result, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("provenance must be finite JSON-serializable data") from exc
+    return result
 
 
 def export_trajectory_tape(
@@ -34,113 +55,169 @@ def export_trajectory_tape(
     num_particles: int = 512,
     num_steps: int = 60,
     seed: int = 42,
-    box_size: float = 8.0,
+    box_size: float | None = None,
     title: str = "Isotropic-Hessian OT-CFM Particle Flow",
+    *,
+    provenance: Mapping[str, Any] | None = None,
+    source_run: str | None = None,
+    source_model: str | None = None,
+    git_sha: str | None = None,
 ) -> Path:
-    """Export particle flow simulation into orchard video/tape/1 format."""
-    output_tape_dir = Path(output_tape_dir)
-    output_tape_dir.mkdir(parents=True, exist_ok=True)
+    """Write a ``video/tape/1`` trajectory and its browser-viewer sidecar.
+
+    Scientific coordinates are ``(q1, q2, Phi(t, q))``. The tape is translated
+    into a tight positive quantization box; ``meta.coordinate_convention``
+    records the inverse translation. Flow time is dimensionless and normalized
+    to ``[0, 1]``. ``Phi`` has an arbitrary time-dependent additive gauge, so
+    absolute vertical position is not comparable across independently trained
+    models unless their gauges are fixed.
+
+    ``box_size`` is retained for compatibility and, when supplied, is a minimum
+    per-axis box extent. It never clips a trajectory.
+    """
+    orchard_tape = _require_module("orchard_tape", "trajectory export")
+    if not isinstance(num_particles, int) or num_particles <= 0:
+        raise ValueError("num_particles must be a positive integer")
+    if not isinstance(num_steps, int) or num_steps <= 0:
+        raise ValueError("num_steps must be a positive integer")
+    if box_size is not None and (not np.isfinite(box_size) or box_size <= 0):
+        raise ValueError("box_size must be finite and positive when supplied")
+
+    scientific_provenance = _validated_provenance(provenance)
+    if source_run is not None:
+        scientific_provenance["source_run"] = source_run
+    if source_model is not None:
+        scientific_provenance["source_model"] = source_model
 
     key = jax.random.key(seed)
-    k_x0, k_target = jax.random.split(key)
-    x0_2d = jax.random.normal(k_x0, shape=(num_particles, 2))
-
-    # Integrate 2D ODE with RK4
+    x0_2d = jax.random.normal(key, shape=(num_particles, 2))
     _, trajectory_2d = integrate_ode(params, x0_2d, num_steps=num_steps)
 
-    # Convert 2D trajectory + potential into 3D positions [x, y, z]
-    # Center the coordinate box around origin by offsetting [x + box_size/2, y + box_size/2, z + box_size/2]
-    # for uint16 quantization in [0, box_size]
-    box = (box_size, box_size, box_size)
-    half_box = box_size / 2.0
+    times = np.linspace(0.0, 1.0, num_steps + 1, dtype=np.float64)
+    positions: list[np.ndarray] = []
+    velocities: list[np.ndarray] = []
+    potentials: list[np.ndarray] = []
+    planar_positions: list[np.ndarray] = []
+    planar_velocities: list[np.ndarray] = []
 
-    # Determine species based on which of 8 modes each final particle landed closest to
-    angles = np.linspace(0, 2 * np.pi, 9)[:-1]
-    centers = np.stack([2.0 * np.cos(angles), 2.0 * np.sin(angles)], axis=1)
-    final_pts = np.asarray(trajectory_2d[-1])
-    from scipy.spatial.distance import cdist
-    dists = cdist(final_pts, centers)
-    species_labels = np.argmin(dists, axis=1).astype(np.uint8)
+    for step_idx, x_t in enumerate(trajectory_2d):
+        t = jnp.asarray(times[step_idx])
+        phi = jax.vmap(lambda point: evaluate_potential(params, t, point))(x_t)
+        v_xy = jax.vmap(lambda point: velocity(params, t, point))(x_t)
+        partial_t = jax.vmap(
+            lambda point: jax.grad(lambda time: evaluate_potential(params, time, point))(t)
+        )(x_t)
+        # Along a trajectory, dPhi/dt = partial_t Phi + grad(Phi) dot dq/dt.
+        v_phi = partial_t + jnp.sum(jnp.square(v_xy), axis=1)
 
-    if orchard_tape is not None:
-        writer = orchard_tape.TapeWriter(
-            path=output_tape_dir,
-            box=box,
-            n_total=num_particles,
-            run_seed=seed,
-            quantize="uint16",
-            periodic=(False, False, False),
-            velocity=True,
-            scalars=(("species", "uint8"), ("potential", "float32")),
-            units="reduced (sigma, tau)",
-            meta={
-                "title": title,
-                "description": "Optimal Transport Conditional Flow Matching in VR",
-                "species_names": [f"Mode {i}" for i in range(8)],
-                "box_offset": [-half_box, -half_box, -half_box],
-            },
-        )
+        xy = _finite(f"trajectory frame {step_idx}", x_t).astype(np.float64)
+        phi_np = _finite(f"potential frame {step_idx}", phi).astype(np.float64)
+        v_xy_np = _finite(f"velocity frame {step_idx}", v_xy).astype(np.float64)
+        v_phi_np = _finite(f"potential derivative frame {step_idx}", v_phi).astype(np.float64)
+        planar_positions.append(xy)
+        planar_velocities.append(v_xy_np)
+        potentials.append(phi_np)
+        positions.append(np.column_stack((xy, phi_np)))
+        velocities.append(np.column_stack((v_xy_np, v_phi_np)))
 
-        dt = 1.0 / num_steps
-        for step_idx, x_t in enumerate(trajectory_2d):
-            t_val = step_idx * dt
-            # Evaluate potential z = Phi(t, x)
-            phi_vals = jax.vmap(lambda p_: evaluate_potential(params, jnp.array(t_val), p_))(x_t)
-            v_2d = jax.vmap(lambda p_: velocity(params, jnp.array(t_val), p_))(x_t)
-            partial_t = jax.vmap(
-                lambda p_: jax.grad(
-                    lambda t_: evaluate_potential(params, t_, p_)
-                )(jnp.array(t_val))
-            )(x_t)
+    all_positions = np.concatenate(positions, axis=0)
+    lower_raw = all_positions.min(axis=0)
+    upper_raw = all_positions.max(axis=0)
+    span = upper_raw - lower_raw
+    padding = np.maximum(span * 0.025, 1e-4)
+    extent = span + 2.0 * padding
+    if box_size is not None:
+        extent = np.maximum(extent, float(box_size))
+    center = (lower_raw + upper_raw) / 2.0
+    origin = center - extent / 2.0
+    tape_positions = [frame - origin for frame in positions]
 
-            # 3D positions with z scaled
-            pos_x = np.asarray(x_t[:, 0]) + half_box
-            pos_y = np.asarray(x_t[:, 1]) + half_box
-            pos_z = np.asarray(phi_vals) * 0.5 + half_box
-            pos_3d = np.stack([pos_x, pos_y, pos_z], axis=1)
+    final_pts = planar_positions[-1]
+    angles = np.linspace(0.0, 2.0 * np.pi, 9)[:-1]
+    centers = np.stack((2.0 * np.cos(angles), 2.0 * np.sin(angles)), axis=1)
+    species_labels = np.argmin(cdist(final_pts, centers), axis=1).astype(np.uint8)
 
-            # 3D velocities
-            vel_x = np.asarray(v_2d[:, 0])
-            vel_y = np.asarray(v_2d[:, 1])
-            vel_z = np.asarray(partial_t + jnp.sum(jnp.square(v_2d), axis=1)) * 0.5
-            vel_3d = np.stack([vel_x, vel_y, vel_z], axis=1)
+    coordinate_convention = {
+        "scientific": ["q1", "q2", "Phi(t,q)"],
+        "tape": "scientific - tape_origin",
+        "tape_origin": origin.tolist(),
+        "viewer": ["q1", "Phi(t,q)", "q2"],
+    }
+    meta = {
+        "title": title,
+        "description": "Optimal Transport Conditional Flow Matching trajectory",
+        "species_names": [f"Target mode {index}" for index in range(8)],
+        "coordinate_convention": coordinate_convention,
+        "time": {
+            "coordinate": "normalized flow time",
+            "unit": "dimensionless",
+            "interval": [0.0, 1.0],
+        },
+        "units": {
+            "q1": "dimensionless model coordinate",
+            "q2": "dimensionless model coordinate",
+            "Phi": "dimensionless learned potential",
+        },
+        "potential_gauge": (
+            "Phi is defined only up to a time-dependent additive gauge; absolute vertical "
+            "offsets are not comparable across models unless the gauge is fixed."
+        ),
+        "provenance": scientific_provenance,
+    }
 
+    output_tape_dir = Path(output_tape_dir)
+    output_tape_dir.mkdir(parents=True, exist_ok=True)
+    with orchard_tape.TapeWriter(
+        path=output_tape_dir,
+        box=tuple(float(value) for value in extent),
+        n_total=num_particles,
+        run_seed=seed,
+        quantize="uint16",
+        periodic=(False, False, False),
+        velocity=True,
+        scalars=(("species", "uint8"), ("potential", "float32")),
+        units="dimensionless model coordinates; normalized flow time [0,1]",
+        t0_origin="start of normalized OT-CFM integration",
+        t0_offset_tau=0.0,
+        meta=meta,
+        git_sha=git_sha,
+    ) as writer:
+        for step_idx, time in enumerate(times):
             writer.append(
                 step=step_idx,
-                time=float(t_val),
-                pos=pos_3d,
-                vel=vel_3d,
+                time=float(time),
+                pos=tape_positions[step_idx],
+                vel=velocities[step_idx],
                 species=species_labels,
-                potential=np.asarray(phi_vals, dtype=np.float32),
+                potential=potentials[step_idx].astype(np.float32),
             )
-        writer.close()
-
-    # Also export standalone JSON particle trajectory for direct WebXR viewer
-    frames_json = []
-    dt = 1.0 / num_steps
-    for step_idx, x_t in enumerate(trajectory_2d):
-        t_val = step_idx * dt
-        phi_vals = jax.vmap(lambda p_: evaluate_potential(params, jnp.array(t_val), p_))(x_t)
-        v_2d = jax.vmap(lambda p_: velocity(params, jnp.array(t_val), p_))(x_t)
-
-        frames_json.append({
-            "step": step_idx,
-            "time": float(t_val),
-            "positions": np.asarray(x_t).tolist(),
-            "potentials": np.asarray(phi_vals).tolist(),
-            "velocities": np.asarray(v_2d).tolist(),
-        })
 
     payload = {
         "title": title,
+        "synthetic": bool(scientific_provenance.get("synthetic", False)),
         "num_particles": num_particles,
         "num_steps": num_steps,
+        "coordinate_convention": coordinate_convention,
+        "time_unit": "dimensionless normalized flow time",
+        "potential_gauge": meta["potential_gauge"],
+        "provenance": scientific_provenance,
         "species": species_labels.tolist(),
-        "frames": frames_json,
+        "bounds": {"min": lower_raw.tolist(), "max": upper_raw.tolist()},
+        "frames": [
+            {
+                "step": index,
+                "time": float(times[index]),
+                "positions": planar_positions[index].tolist(),
+                "potentials": potentials[index].tolist(),
+                "velocities": planar_velocities[index].tolist(),
+            }
+            for index in range(num_steps + 1)
+        ],
     }
-    with open(output_tape_dir / "webxr_particles.json", "w", encoding="utf-8") as f:
-        json.dump(payload, f)
-
+    (output_tape_dir / "webxr_particles.json").write_text(
+        json.dumps(payload, allow_nan=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
     return output_tape_dir
 
 
@@ -148,16 +225,24 @@ def create_orchard_bundle(
     tape_dir: Path,
     bundle_output_dir: Path,
     title: str = "QuantumFlow OT-CFM Transport Flow",
-) -> Path | None:
-    """Bundle the particle tape using orchard/bundle/1 format."""
-    if bundle_tape is None:
-        return None
-    bundle_dir = bundle_tape(
-        tape_dir=tape_dir,
-        tree="quantumflow",
-        title=title,
-        out_root=bundle_output_dir,
+    *,
+    commit: str | None = None,
+) -> Path:
+    """Create and verify an official ``orchard/bundle/1`` tape bundle."""
+    bundle = _require_module("orchard.bundle", "bundle creation")
+    bundle_dir = Path(
+        bundle.bundle_tape(
+            tape_dir=tape_dir,
+            tree="quantumflow",
+            title=title,
+            out_root=bundle_output_dir,
+            verbose=False,
+            commit=commit,
+        )
     )
+    report = bundle.verify_bundle(bundle_dir)
+    if not report.get("ok"):
+        raise RuntimeError(f"Orchard bundle verification failed: {report}")
     return bundle_dir
 
 
@@ -166,264 +251,242 @@ def generate_webxr_gallery_html(
     particles_json_rel_path: str = "webxr_particles.json",
     title: str = "QuantumFlow OT-CFM VR Gallery",
 ) -> None:
-    """Generate a self-contained WebXR 3D VR gallery HTML page."""
-    html_content = f"""<!DOCTYPE html>
+    """Write an offline-capable Three.js gallery with graceful WebXR fallback."""
+    output_html_path = Path(output_html_path)
+    output_html_path.parent.mkdir(parents=True, exist_ok=True)
+    assets_dir = output_html_path.parent / "assets"
+    assets_dir.mkdir(exist_ok=True)
+    for asset in _ASSETS:
+        source = _ASSET_DIR / asset
+        if not source.is_file():
+            raise RuntimeError(f"Vendored gallery asset is missing: {source}")
+        shutil.copy2(source, assets_dir / asset)
+
+    document = _GALLERY_HTML.replace("__TITLE_HTML__", html.escape(title)).replace(
+        "__TITLE_JSON__", json.dumps(title)
+    ).replace("__DATA_URL__", json.dumps(particles_json_rel_path))
+    output_html_path.write_text(document, encoding="utf-8")
+
+
+_GALLERY_HTML = r"""<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{title}</title>
-    <style>
-        body {{
-            margin: 0;
-            overflow: hidden;
-            background-color: #050811;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            color: #e2e8f0;
-        }}
-        #info-overlay {{
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(15, 23, 42, 0.85);
-            padding: 16px 20px;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(8px);
-            z-index: 100;
-            max-width: 360px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-        }}
-        h1 {{
-            font-size: 1.1rem;
-            margin: 0 0 8px 0;
-            color: #38bdf8;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-        }}
-        p {{
-            font-size: 0.85rem;
-            margin: 4px 0;
-            color: #94a3b8;
-        }}
-        .metric-badge {{
-            display: inline-block;
-            background: rgba(56, 189, 248, 0.15);
-            color: #38bdf8;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-weight: 600;
-            font-size: 0.8rem;
-            margin-top: 6px;
-        }}
-        #controls {{
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 12px;
-            z-index: 100;
-            background: rgba(15, 23, 42, 0.85);
-            padding: 10px 16px;
-            border-radius: 30px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(8px);
-        }}
-        button {{
-            background: #0284c7;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: 500;
-            font-size: 0.85rem;
-            transition: all 0.2s ease;
-        }}
-        button:hover {{
-            background: #0369a1;
-            transform: translateY(-1px);
-        }}
-    </style>
-    <!-- Three.js and VRButton -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/webxr/VRButton.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>__TITLE_HTML__</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100dvh; overflow: hidden; background: #07090d; color: #f6f7f9; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .panel { position: fixed; z-index: 2; background: rgba(12,15,21,.92); border: 1px solid #353b46;
+      box-shadow: 0 14px 36px rgba(0,0,0,.42); }
+    #info { inset: max(16px,env(safe-area-inset-top)) auto auto max(16px,env(safe-area-inset-left));
+      width: min(430px,calc(100vw - 32px)); padding: 18px 20px; }
+    h1 { margin: 0 0 8px; max-width: 20ch; font-size: clamp(1.25rem,3vw,2rem); line-height: 1.05;
+      letter-spacing: -.03em; overflow-wrap: anywhere; }
+    p { margin: 5px 0; max-width: 65ch; color: #b9c1cc; font-size: .9rem; line-height: 1.45; }
+    #status[data-state="error"] { color: #ffb4aa; }
+    #status[data-state="ready"] { color: #a9dfc2; }
+    #meta { font-variant-numeric: tabular-nums; }
+    #retry { display: none; margin-top: 12px; }
+    #controls { inset: auto auto max(16px,env(safe-area-inset-bottom)) 50%; transform: translateX(-50%);
+      width: min(720px,calc(100vw - 32px)); padding: 12px; display: grid;
+      grid-template-columns: auto auto minmax(150px,1fr) auto; gap: 10px; align-items: center; }
+    button, select, input { font: inherit; }
+    button, select { min-height: 44px; border: 1px solid #515968; background: #171c24; color: #fff;
+      padding: 8px 14px; cursor: pointer; }
+    button:hover, select:hover { background: #242b36; }
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid #7dd3fc; outline-offset: 2px; }
+    button:disabled, select:disabled, input:disabled { opacity: .48; cursor: not-allowed; }
+    input[type="range"] { width: 100%; min-height: 44px; accent-color: #ff7657; cursor: pointer; }
+    #xr-slot { position: fixed; right: max(16px,env(safe-area-inset-right));
+      top: max(16px,env(safe-area-inset-top)); z-index: 3; }
+    #xr-slot button { position: static !important; width: auto !important; opacity: 1 !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    @media (max-width: 620px) {
+      #info { padding: 14px 16px; }
+      #info p:not(#status):not(#meta) { display: none; }
+      #xr-slot { top: auto; bottom: calc(86px + env(safe-area-inset-bottom)); }
+      #controls { grid-template-columns: 1fr 1fr auto; }
+      #scrubber-wrap { grid-column: 1 / -1; grid-row: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+  </style>
+  <script type="importmap">{"imports":{"three":"./assets/three.module.min.js"}}</script>
 </head>
 <body>
-    <div id="info-overlay">
-        <h1>{title}</h1>
-        <p>Optimal Transport Conditional Flow Matching</p>
-        <p id="status-text">Loading simulation data...</p>
-        <div class="metric-badge" id="step-badge">Step: 0 / 60 (t = 0.00)</div>
-    </div>
+  <section id="info" class="panel" aria-labelledby="title">
+    <h1 id="title">__TITLE_HTML__</h1>
+    <p>Coordinates: q1 × q2, lifted vertically by the learned potential Φ(t,q).</p>
+    <p id="status" data-state="loading" role="status" aria-live="polite">Loading trajectory…</p>
+    <p id="meta">Frame — · t = —</p>
+    <button id="retry" type="button">Retry data load</button>
+  </section>
+  <div id="xr-slot" aria-label="Immersive viewing"></div>
+  <section id="controls" class="panel" aria-label="Playback controls">
+    <button id="play" type="button" disabled>Play</button>
+    <button id="restart" type="button" disabled>Restart</button>
+    <label id="scrubber-wrap"><span class="sr-only">Trajectory frame</span>
+      <input id="scrubber" type="range" min="0" max="0" value="0" disabled>
+    </label>
+    <label><span class="sr-only">Playback speed</span>
+      <select id="speed" disabled aria-label="Playback speed">
+        <option value=".5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option>
+      </select>
+    </label>
+  </section>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from './assets/OrbitControls.js';
+    import { VRButton } from './assets/VRButton.js';
 
-    <div id="controls">
-        <button id="btn-play">Pause</button>
-        <button id="btn-restart">Restart Flow</button>
-        <button id="btn-speed">1x Speed</button>
-    </div>
+    const DATA_URL = __DATA_URL__;
+    const TITLE = __TITLE_JSON__;
+    const palette = [0xff7657,0x59c3ff,0xa7df78,0xf4c95d,0xb9a1ff,0xff9fc9,0x75e6c2,0xe8edf2];
+    const ui = Object.fromEntries(['status','meta','retry','play','restart','scrubber','speed','xr-slot']
+      .map(id => [id, document.getElementById(id)]));
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let data, points, frame = 0, playing = false, elapsed = 0, lastTime = 0;
 
-    <script>
-        let scene, camera, renderer, controls;
-        let particleSystem, particleGeometry;
-        let flowData = null;
-        let currentFrame = 0;
-        let isPlaying = true;
-        let playSpeed = 1.0;
-        let lastTime = 0;
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x07090d);
+    scene.fog = new THREE.FogExp2(0x07090d, .018);
+    const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, .01, 1000);
+    const renderer = new THREE.WebGLRenderer({antialias: true, powerPreference: 'high-performance'});
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.xr.enabled = true;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.prepend(renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = !reducedMotion;
+    controls.target.set(0, 0, 0);
+    scene.add(new THREE.HemisphereLight(0xbfe6ff, 0x242018, 2.2));
+    const grid = new THREE.GridHelper(10, 20, 0x485260, 0x202733);
+    scene.add(grid);
+    const xrButton = VRButton.createButton(renderer);
+    ui['xr-slot'].append(xrButton);
 
-        const PALETTE = [
-            0x38bdf8, 0x818cf8, 0xc084fc, 0xf472b6,
-            0xfb7185, 0xfb923c, 0xfacc15, 0x4ade80
-        ];
+    function fail(message) {
+      playing = false;
+      ui.status.dataset.state = 'error';
+      ui.status.textContent = message;
+      ui.retry.style.display = 'inline-block';
+      for (const control of [ui.play, ui.restart, ui.scrubber, ui.speed]) control.disabled = true;
+    }
 
-        async function init() {{
-            scene = new THREE.Scene();
-            scene.fog = new THREE.FogExp2(0x050811, 0.04);
+    function validate(raw) {
+      if (!raw || !Number.isInteger(raw.num_particles) || raw.num_particles < 1 ||
+          !Array.isArray(raw.frames) || raw.frames.length < 2 ||
+          !Array.isArray(raw.species) || raw.species.length !== raw.num_particles) {
+        throw new Error('The trajectory file has an invalid shape.');
+      }
+      raw.frames.forEach((item, index) => {
+        if (!Number.isFinite(item.time) || !Array.isArray(item.positions) ||
+            !Array.isArray(item.potentials) || item.positions.length !== raw.num_particles ||
+            item.potentials.length !== raw.num_particles) {
+          throw new Error(`Frame ${index} is incomplete.`);
+        }
+        item.positions.forEach((position, particle) => {
+          if (!Array.isArray(position) || position.length !== 2 ||
+              !position.every(Number.isFinite) || !Number.isFinite(item.potentials[particle])) {
+            throw new Error(`Frame ${index}, particle ${particle} is not finite.`);
+          }
+        });
+      });
+      return raw;
+    }
 
-            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-            camera.position.set(0, 6, 8);
+    function setFrame(index) {
+      frame = Math.max(0, Math.min(data.frames.length - 1, index));
+      const source = data.frames[frame];
+      const positions = points.geometry.attributes.position;
+      for (let i = 0; i < data.num_particles; i++) {
+        positions.setXYZ(i, source.positions[i][0], source.potentials[i], source.positions[i][1]);
+      }
+      positions.needsUpdate = true;
+      ui.scrubber.value = String(frame);
+      ui.meta.textContent = `Frame ${frame + 1} of ${data.frames.length} · t = ${source.time.toFixed(3)}`;
+    }
 
-            renderer = new THREE.WebGLRenderer({{ antialias: true }});
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.xr.enabled = true;
-            document.body.appendChild(renderer.domElement);
+    function buildParticles() {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(data.num_particles * 3), 3));
+      const colors = new Float32Array(data.num_particles * 3);
+      data.species.forEach((species, index) => {
+        const color = new THREE.Color(palette[Math.abs(Number(species) || 0) % palette.length]);
+        color.toArray(colors, index * 3);
+      });
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      points = new THREE.Points(geometry, new THREE.PointsMaterial({
+        size: .075, sizeAttenuation: true, vertexColors: true, transparent: true, opacity: .92
+      }));
+      scene.add(points);
+      setFrame(0);
+      geometry.computeBoundingSphere();
+      const bounds = data.bounds;
+      const center = new THREE.Vector3(
+        (bounds.min[0] + bounds.max[0]) / 2,
+        (bounds.min[2] + bounds.max[2]) / 2,
+        (bounds.min[1] + bounds.max[1]) / 2
+      );
+      const span = Math.max(...bounds.max.map((value, index) => value - bounds.min[index]), .1);
+      controls.target.copy(center);
+      camera.position.copy(center).add(new THREE.Vector3(span * 1.15, span * .8, span * 1.45));
+      camera.near = Math.max(span / 1000, .001);
+      camera.far = Math.max(span * 30, 20);
+      camera.updateProjectionMatrix();
+      grid.scale.setScalar(Math.max(span / 10, .1));
+      grid.position.y = bounds.min[2];
+    }
 
-            document.body.appendChild(VRButton.createButton(renderer));
+    async function loadData() {
+      ui.retry.style.display = 'none';
+      ui.status.dataset.state = 'loading';
+      ui.status.textContent = 'Loading trajectory…';
+      try {
+        const response = await fetch(DATA_URL, {cache: 'no-store'});
+        if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
+        data = validate(await response.json());
+        if (points) { scene.remove(points); points.geometry.dispose(); points.material.dispose(); }
+        buildParticles();
+        ui.scrubber.max = String(data.frames.length - 1);
+        for (const control of [ui.play, ui.restart, ui.scrubber, ui.speed]) control.disabled = false;
+        playing = !reducedMotion;
+        ui.play.textContent = playing ? 'Pause' : 'Play';
+        const synthetic = data.synthetic ? ' Synthetic smoke data.' : '';
+        ui.status.dataset.state = 'ready';
+        ui.status.textContent = `${data.num_particles.toLocaleString()} particles loaded.${synthetic}`;
+      } catch (error) {
+        fail(`Could not load trajectory data: ${error.message} Serve this directory over HTTP and retry.`);
+      }
+    }
 
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
-            controls.target.set(0, 0, 0);
+    ui.retry.addEventListener('click', loadData);
+    ui.play.addEventListener('click', () => { playing = !playing; ui.play.textContent = playing ? 'Pause' : 'Play'; });
+    ui.restart.addEventListener('click', () => { elapsed = 0; setFrame(0); });
+    ui.scrubber.addEventListener('input', event => { playing = false; ui.play.textContent = 'Play'; setFrame(Number(event.target.value)); });
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    });
 
-            // Lighting & Grid
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
-
-            const dirLight = new THREE.DirectionalLight(0x38bdf8, 0.8);
-            dirLight.position.set(5, 10, 7);
-            scene.add(dirLight);
-
-            const grid = new THREE.GridHelper(12, 24, 0x1e293b, 0x0f172a);
-            grid.position.y = -0.01;
-            scene.add(grid);
-
-            // Load particles JSON
-            try {{
-                const res = await fetch('{particles_json_rel_path}');
-                flowData = await res.json();
-                document.getElementById('status-text').innerText = 
-                    `Loaded ${{flowData.num_particles}} particles across ${{flowData.num_steps}} steps.`;
-                setupParticleSystem();
-            }} catch (err) {{
-                document.getElementById('status-text').innerText = "Data preview mode";
-            }}
-
-            window.addEventListener('resize', onWindowResize);
-            setupUI();
-
-            renderer.setAnimationLoop(render);
-        }}
-
-        function setupParticleSystem() {{
-            if (!flowData) return;
-            const count = flowData.num_particles;
-            particleGeometry = new THREE.BufferGeometry();
-            const positions = new Float32Array(count * 3);
-            const colors = new Float32Array(count * 3);
-
-            for (let i = 0; i < count; i++) {{
-                const sp = flowData.species[i] % PALETTE.length;
-                const c = new THREE.Color(PALETTE[sp]);
-                colors[i * 3] = c.r;
-                colors[i * 3 + 1] = c.g;
-                colors[i * 3 + 2] = c.b;
-            }}
-
-            particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            particleGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-            const pMaterial = new THREE.PointsMaterial({{
-                size: 0.12,
-                vertexColors: true,
-                transparent: true,
-                opacity: 0.85,
-                blending: THREE.AdditiveBlending
-            }});
-
-            particleSystem = new THREE.Points(particleGeometry, pMaterial);
-            scene.add(particleSystem);
-            updatePositions(0);
-        }}
-
-        function updatePositions(frameIdx) {{
-            if (!flowData || !particleGeometry) return;
-            const frame = flowData.frames[frameIdx];
-            if (!frame) return;
-
-            const posAttr = particleGeometry.attributes.position;
-            const count = flowData.num_particles;
-            for (let i = 0; i < count; i++) {{
-                const p = frame.positions[i];
-                const phi = frame.potentials ? frame.potentials[i] : 0.0;
-                posAttr.setXYZ(i, p[0], phi * 0.4, p[1]);
-            }}
-            posAttr.needsUpdate = true;
-
-            document.getElementById('step-badge').innerText = 
-                `Step: ${{frame.step}} / ${{flowData.num_steps}} (t = ${{frame.time.toFixed(2)}})`;
-        }}
-
-        function setupUI() {{
-            const btnPlay = document.getElementById('btn-play');
-            btnPlay.addEventListener('click', () => {{
-                isPlaying = !isPlaying;
-                btnPlay.innerText = isPlaying ? 'Pause' : 'Play';
-            }});
-
-            document.getElementById('btn-restart').addEventListener('click', () => {{
-                currentFrame = 0;
-                updatePositions(0);
-            }});
-
-            const btnSpeed = document.getElementById('btn-speed');
-            btnSpeed.addEventListener('click', () => {{
-                if (playSpeed === 1.0) {{ playSpeed = 2.0; btnSpeed.innerText = '2x Speed'; }}
-                else if (playSpeed === 2.0) {{ playSpeed = 0.5; btnSpeed.innerText = '0.5x Speed'; }}
-                else {{ playSpeed = 1.0; btnSpeed.innerText = '1x Speed'; }}
-            }});
-        }}
-
-        function onWindowResize() {{
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }}
-
-        function render(time) {{
-            const delta = (time - lastTime) * 0.001;
-            lastTime = time;
-
-            if (isPlaying && flowData) {{
-                currentFrame += delta * 30 * playSpeed;
-                if (currentFrame >= flowData.frames.length) {{
-                    currentFrame = 0;
-                }}
-                updatePositions(Math.floor(currentFrame));
-            }}
-
-            controls.update();
-            renderer.render(scene, camera);
-        }}
-
-        init();
-    </script>
+    renderer.setAnimationLoop(time => {
+      const delta = Math.min((time - lastTime) / 1000, .1); lastTime = time;
+      if (playing && data) {
+        elapsed += delta * Number(ui.speed.value);
+        const next = Math.floor(elapsed * 12) % data.frames.length;
+        if (next !== frame) setFrame(next);
+      }
+      controls.update();
+      renderer.render(scene, camera);
+    });
+    document.title = TITLE;
+    loadData();
+  </script>
 </body>
 </html>
 """
-    output_html_path = Path(output_html_path)
-    output_html_path.parent.mkdir(parents=True, exist_ok=True)
-    output_html_path.write_text(html_content, encoding="utf-8")

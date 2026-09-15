@@ -49,3 +49,26 @@ def test_report_rejects_invalid_progress(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     with pytest.raises(ValueError, match="cannot exceed"):
         expdash.report(step=2, total=1)
+
+
+def test_continuation_copies_parent_sample_history(monkeypatch, tmp_path):
+    parent = tmp_path / "parent.json"
+    parent.write_text(json.dumps({
+        "values": {"progress_unit": "samples"},
+        "history": [[1.0, 512000, {"loss": 0.2}]],
+    }))
+    child = tmp_path / "child.metrics"
+    monkeypatch.setenv("EXP_METRICS_FILE", str(child))
+    expdash.resume_history(parent)
+    expdash.report(step=524800, total=1024000, loss=0.1, progress_unit="samples")
+    assert [row[1] for row in json.loads(child.read_text())["history"]] == [512000, 524800]
+    with pytest.raises(ValueError, match="backwards"):
+        expdash.report(step=1, loss=0.2)
+
+
+def test_downsampling_keeps_latest_sample(monkeypatch, tmp_path):
+    path = tmp_path / "large.metrics"
+    monkeypatch.setenv("EXP_METRICS_FILE", str(path))
+    for step in range(1, 243):
+        expdash.report(step=step, loss=0.2)
+    assert json.loads(path.read_text())["history"][-1][1] == 242

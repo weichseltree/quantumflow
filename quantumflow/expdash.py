@@ -8,6 +8,7 @@ socket connection is required.
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from pathlib import Path
@@ -18,6 +19,32 @@ MetricValue = Union[int, float, str]
 _HISTORY_MAX = 240
 _history_by_file: dict[str, list[list[object]]] = {}
 _lock = Lock()
+
+
+def validate_history(history: object) -> list[list[object]]:
+    if not isinstance(history, list):
+        raise ValueError("ExpDash history must be a list")
+    last_step = -1
+    for entry in history:
+        if (not isinstance(entry, list) or len(entry) != 3
+                or not isinstance(entry[0], (int, float)) or not math.isfinite(entry[0])
+                or not isinstance(entry[1], int) or entry[1] < last_step
+                or not isinstance(entry[2], dict)):
+            raise ValueError("ExpDash history must contain ordered [timestamp, step, metrics] rows")
+        last_step = entry[1]
+    return history
+
+
+def resume_history(source: Path) -> None:
+    """Seed a new scheduled job's chart with its parent run's sample history."""
+    destination = os.environ.get("EXP_METRICS_FILE")
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    if payload.get("values", {}).get("progress_unit") != "samples":
+        raise ValueError("Parent history must use cumulative samples")
+    history = validate_history(payload["history"])
+    if destination:
+        with _lock:
+            _history_by_file[destination] = list(history)
 
 
 def is_enabled() -> bool:
@@ -58,6 +85,8 @@ def report(
         raise ValueError("step cannot exceed total")
     if any(not isinstance(value, (int, float, str)) for value in values.values()):
         raise TypeError("metric values must be integers, floats, or strings")
+    if any(isinstance(value, float) and not math.isfinite(value) for value in values.values()):
+        raise ValueError("metrics must be finite")
 
     absolute_step = step + step_offset if step is not None else None
     absolute_total = total + step_offset if total is not None else None
@@ -77,15 +106,16 @@ def report(
                     raise ValueError(
                         f"cannot resume malformed ExpDash metrics file: {destination}"
                     ) from error
-                previous_history = previous.get("history", [])
-                if not isinstance(previous_history, list):
-                    raise ValueError("existing ExpDash history must be a list")
-                history.extend(previous_history)
+                history.extend(validate_history(previous.get("history", [])))
             _history_by_file[metrics_file] = history
         if absolute_step is not None:
+            if history and absolute_step < history[-1][1]:
+                raise ValueError("Cumulative progress cannot move backwards")
+            if history and absolute_step == history[-1][1]:
+                history.pop()
             history.append([now, absolute_step, numeric_values])
             if len(history) > _HISTORY_MAX:
-                history[:] = history[::2]
+                history[:] = history[:-1:2] + [history[-1]]
         payload = {
             "ts": now,
             "step": absolute_step,

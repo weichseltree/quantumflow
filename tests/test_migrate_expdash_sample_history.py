@@ -33,3 +33,9 @@ def test_migrates_legacy_step_history_to_samples(tmp_path) -> None:
     assert payload["total"] == 512000
     assert [entry[1] for entry in payload["history"]] == [12800, 512000]
     assert payload["values"]["progress_unit"] == "samples"
+
+
+def test_skips_non_record_json(tmp_path) -> None:
+    path = tmp_path / "events.json"
+    path.write_text("[]", encoding="utf-8")
+    assert not migrate_record(path)

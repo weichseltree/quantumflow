@@ -19,6 +19,8 @@ def batch_size_from_command(command: str) -> int:
 
 def migrate_record(status_path: Path) -> bool:
     status = json.loads(status_path.read_text(encoding="utf-8"))
+    if not isinstance(status, dict):
+        return False
     if status.get("sweep") != "transport-beta-pilot":
         return False
     metrics_path = status_path.with_suffix(".metrics")

@@ -57,7 +57,9 @@ def generate_dataset(experiment: str, run_name: str, output_dir: Path | None = N
 
     config = load_run_config(experiment, run_name, PROJECT_ROOT / "experiments")
     run_dir = _run_directory(experiment, run_name, output_dir)
-    dataset = quantumflow.instantiate(config, run_dir=run_dir)
+    dataset = quantumflow.instantiate(
+        config, run_dir=run_dir, experiments_dir=PROJECT_ROOT / "experiments"
+    )
     dataset.build()
 
 
@@ -69,9 +71,13 @@ def train(experiment: str, run_name: str, output_dir: Path | None = None) -> Non
 
     config = load_run_config(experiment, run_name, PROJECT_ROOT / "experiments")
     run_dir = _run_directory(experiment, run_name, output_dir)
-    dataset_train = quantumflow.instantiate(config["dataset_train"], run_dir=run_dir)
+    dataset_train = quantumflow.instantiate(
+        config["dataset_train"], run_dir=run_dir, experiments_dir=PROJECT_ROOT / "experiments"
+    )
     dataset_train.build()
-    dataset_validate = quantumflow.instantiate(config["dataset_validate"], run_dir=run_dir)
+    dataset_validate = quantumflow.instantiate(
+        config["dataset_validate"], run_dir=run_dir, experiments_dir=PROJECT_ROOT / "experiments"
+    )
     dataset_validate.build()
 
     tf.keras.backend.clear_session()

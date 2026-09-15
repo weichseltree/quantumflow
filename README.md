@@ -40,6 +40,15 @@ quantumflow-train resnets resnet_100 --output-dir /path/to/results
 The legacy `scripts/generate_dataset.py` and `scripts/train_network.py` commands remain
 available and accept the same arguments.
 
+### Convex kinetic-energy functional
+
+`experiments/convex_1d/hyperparams.yaml` provides an ICNN-based 1D kinetic-energy
+functional. Its non-negative hidden and output connections and Softplus activations guarantee
+convexity with respect to the discretized density. The functional derivative is obtained with
+automatic differentiation; recover an external potential with
+`potential_from_kinetic_derivative(derivative, chemical_potential)`, implementing
+`v(x) = mu - delta T[n] / delta n(x)`.
+
 ## Clean notebooks
 
 To strip cell outputs when notebooks are committed, configure the repository-local filter:

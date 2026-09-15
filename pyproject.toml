@@ -12,18 +12,22 @@ license = { file = "LICENSE" }
 dependencies = [
     "h5py>=3.10",
     "ipywidgets>=8.1",
+    "jax>=0.4.38",
     "matplotlib>=3.8",
     "nbformat>=5.9",
     "numpy>=1.26",
+    "optax>=0.2.4",
     "pandas>=2.1",
     "ruamel.yaml>=0.18",
-    "tensorflow>=2.16",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
+]
+legacy-tensorflow = [
+    "tensorflow>=2.16",
 ]
 
 [project.scripts]

@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantumflow"
+version = "0.1.0"
+description = "Research tooling for quantum-flow and orbital-free DFT experiments."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+    "h5py>=3.10",
+    "ipywidgets>=8.1",
+    "matplotlib>=3.8",
+    "nbformat>=5.9",
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "ruamel.yaml>=0.18",
+    "tensorflow>=2.16,<2.19",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+quantumflow-dataset = "quantumflow.cli:dataset_main"
+quantumflow-train = "quantumflow.cli:train_main"
+
+[tool.setuptools.packages.find]
+include = ["quantumflow*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = ["notebooks", "experiments"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

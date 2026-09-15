@@ -48,4 +48,10 @@ class Dataset():
         raise NotImplementedError()
 
 
-from . import utils
+def __getattr__(name):
+    """Lazily import optional package namespaces."""
+    if name == "utils":
+        module = importlib.import_module(f"{__name__}.utils")
+        globals()[name] = module
+        return module
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

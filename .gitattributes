@@ -27,7 +27,7 @@
 *.ipynb  text -diff
 *.ipynb  diff=jupyternotebook
 *.ipynb  merge=jupyternotebook
-*.ipynb  filter=clean_notebook
+*.ipynb  filter=notebook-clean
 
 # Note: .db, .p, and .pkl files are associated
 # with the python modules ``pickle``, ``dbm.*``,

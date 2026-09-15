@@ -21,6 +21,7 @@ from quantumflow.ot_cfm import (
     exact_ot_coupling,
     init_potential_network,
     integrate_ode,
+    load_model_params,
     sample_8gaussians,
     save_model_params,
     sliced_wasserstein_distance,
@@ -36,16 +37,27 @@ def train_and_eval(
     output_dir: Path | None = None,
     eval_samples: int = 2048,
     fixed_eval_seed: int | None = 1_000_003,
+    init_model: Path | None = None,
+    step_offset: int = 0,
+    sample_offset: int | None = None,
 ) -> dict[str, float | list[float] | dict[str, float]]:
     if num_steps < 1 or batch_size < 1 or eval_samples < 1:
         raise ValueError("num_steps, batch_size, and eval_samples must be positive")
     if beta < 0:
         raise ValueError("beta must be non-negative")
+    if step_offset < 0:
+        raise ValueError("step_offset must be non-negative")
+    if sample_offset is None:
+        sample_offset = step_offset * batch_size
+    if sample_offset < 0:
+        raise ValueError("sample_offset must be non-negative")
 
     key = jax.random.key(seed)
     numpy_rng = np.random.default_rng(seed)
     key, subkey = jax.random.split(key)
     params = init_potential_network(subkey, in_dim=2, hidden_dims=(128, 128))
+    if init_model is not None:
+        params = load_model_params(init_model)
 
     optimizer = optax.adam(learning_rate=lr)
     opt_state = optimizer.init(params)
@@ -82,13 +94,18 @@ def train_and_eval(
             loss = float(aux["loss"])
             loss_cfm = float(aux["loss_cfm"])
             loss_iso = float(aux["loss_iso"])
+            absolute_optimizer_step = step_offset + step
+            absolute_samples = sample_offset + step * batch_size
             expdash.report(
-                step=step,
-                total=num_steps,
+                step=absolute_samples,
+                total=sample_offset + num_steps * batch_size,
                 loss=loss,
                 loss_cfm=loss_cfm,
                 loss_iso=loss_iso,
                 penalty=loss_iso,
+                optimizer_step=absolute_optimizer_step,
+                samples_seen=absolute_samples,
+                progress_unit="samples",
             )
             print(
                 f"[{step}/{num_steps}] loss: {loss:.5f} "
@@ -159,9 +176,16 @@ def train_and_eval(
             "eval_samples": eval_samples,
             "ode_step_counts": step_counts,
             "fixed_eval_seed": fixed_eval_seed,
+            "init_model": str(init_model) if init_model else None,
+            "step_offset": step_offset,
+            "sample_offset": sample_offset,
         },
         "beta": beta,
         "num_steps": num_steps,
+        "start_step": step_offset,
+        "end_step": step_offset + num_steps,
+        "start_samples": sample_offset,
+        "end_samples": sample_offset + num_steps * batch_size,
         "batch_size": batch_size,
         "final_loss": float(aux["loss"]),
         "final_loss_cfm": float(aux["loss_cfm"]),
@@ -204,6 +228,24 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=256, help="Batch size")
     parser.add_argument("--output-dir", type=Path, default=None, help="Output directory")
     parser.add_argument("--seed", type=int, default=42, help="Experiment seed")
+    parser.add_argument(
+        "--init-model",
+        type=Path,
+        default=None,
+        help="Portable model archive to continue from",
+    )
+    parser.add_argument(
+        "--step-offset",
+        type=int,
+        default=0,
+        help="Completed steps before this continuation",
+    )
+    parser.add_argument(
+        "--sample-offset",
+        type=int,
+        default=None,
+        help="Completed samples before this continuation",
+    )
     args = parser.parse_args()
 
     train_and_eval(
@@ -212,6 +254,9 @@ def main() -> None:
         batch_size=args.batch_size,
         seed=args.seed,
         output_dir=args.output_dir,
+        init_model=args.init_model,
+        step_offset=args.step_offset,
+        sample_offset=args.sample_offset,
     )
 
 

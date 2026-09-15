@@ -105,3 +105,28 @@ def test_training_evaluation_is_reproducible(tmp_path) -> None:
     )
     for field in deterministic_fields:
         np.testing.assert_equal(first[field], second[field])
+
+
+def test_training_continuation_reports_absolute_budget(tmp_path) -> None:
+    initial_dir = tmp_path / "initial"
+    train_and_eval(
+        beta=0.0,
+        num_steps=1,
+        batch_size=4,
+        seed=3,
+        eval_samples=8,
+        output_dir=initial_dir,
+    )
+    continued = train_and_eval(
+        beta=0.0,
+        num_steps=1,
+        batch_size=4,
+        seed=3,
+        eval_samples=8,
+        init_model=initial_dir / "model.npz",
+        step_offset=2000,
+    )
+    assert continued["start_step"] == 2000
+    assert continued["end_step"] == 2001
+    assert continued["start_samples"] == 8000
+    assert continued["end_samples"] == 8004

@@ -16,7 +16,7 @@ from typing import Union
 
 MetricValue = Union[int, float, str]
 _HISTORY_MAX = 240
-_history: list[list[object]] = []
+_history_by_file: dict[str, list[list[object]]] = {}
 _lock = Lock()
 
 
@@ -29,6 +29,7 @@ def report(
     *,
     step: int | None = None,
     total: int | None = None,
+    step_offset: int | None = None,
     **values: MetricValue,
 ) -> bool:
     """Publish scalar progress values to the active ExpDash run.
@@ -41,6 +42,14 @@ def report(
     metrics_file = os.environ.get("EXP_METRICS_FILE")
     if not metrics_file:
         return False
+    if step_offset is None:
+        raw_offset = os.environ.get("EXP_STEP_OFFSET", "0")
+        try:
+            step_offset = int(raw_offset)
+        except ValueError as error:
+            raise ValueError("EXP_STEP_OFFSET must be an integer") from error
+    if step_offset < 0:
+        raise ValueError("step_offset must be non-negative")
     if step is not None and step < 0:
         raise ValueError("step must be non-negative")
     if total is not None and total < 0:
@@ -50,23 +59,42 @@ def report(
     if any(not isinstance(value, (int, float, str)) for value in values.values()):
         raise TypeError("metric values must be integers, floats, or strings")
 
+    absolute_step = step + step_offset if step is not None else None
+    absolute_total = total + step_offset if total is not None else None
     now = time.time()
     numeric_values = {
         name: value for name, value in values.items() if isinstance(value, (int, float))
     }
     with _lock:
-        if step is not None:
-            _history.append([now, step, numeric_values])
-            if len(_history) > _HISTORY_MAX:
-                _history[:] = _history[::2]
+        destination = Path(metrics_file)
+        history = _history_by_file.get(metrics_file)
+        if history is None:
+            history = []
+            if destination.is_file():
+                try:
+                    previous = json.loads(destination.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as error:
+                    raise ValueError(
+                        f"cannot resume malformed ExpDash metrics file: {destination}"
+                    ) from error
+                previous_history = previous.get("history", [])
+                if not isinstance(previous_history, list):
+                    raise ValueError("existing ExpDash history must be a list")
+                history.extend(previous_history)
+            _history_by_file[metrics_file] = history
+        if absolute_step is not None:
+            history.append([now, absolute_step, numeric_values])
+            if len(history) > _HISTORY_MAX:
+                history[:] = history[::2]
         payload = {
             "ts": now,
-            "step": step,
-            "total": total,
+            "step": absolute_step,
+            "total": absolute_total,
+            "local_step": step,
+            "step_offset": step_offset,
             "values": values,
-            "history": _history,
+            "history": history,
         }
-        destination = Path(metrics_file)
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_name(f"{destination.name}.tmp")
         temporary.write_text(json.dumps(payload), encoding="utf-8")

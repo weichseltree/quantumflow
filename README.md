@@ -109,6 +109,11 @@ model archive for every run, and `gallery/` containing a WebXR viewer,
 `video/tape/1` particle tape, and `orchard/bundle/1` bundle for the promoted
 candidate.
 
+ExpDash progress uses cumulative samples processed as its x-axis. Continuation
+runs also publish their absolute optimizer step and accept independent
+`--step-offset` and `--sample-offset` values, so charts remain monotonic even
+when a promoted run changes batch size.
+
 The launcher disables JAX's default whole-device memory preallocation. This
 keeps the experiments within the 8 GiB RTX 3070 budget while ExpDash retains
 exclusive scheduling of the GPU lane.

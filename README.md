@@ -57,10 +57,31 @@ Each invocation has a stable artifact location at
 `--output-dir` when a dashboard needs to aggregate multiple runs. TensorBoard callbacks in
 an experiment configuration write event files into that same run directory.
 
-ExpDash is not a QuantumFlow dependency. Configure its experiment or TensorBoard connector
-to read the shared output directory, then compare runs by their `experiment/run-name`
-path. Keep configurations, source code, and dashboard metadata in Git; keep checkpoints,
-event logs, and generated datasets in `outputs/`, which is intentionally ignored.
+ExpDash runs in WSL at `http://localhost:8686/`. Launch local experiments from the WSL
+checkout (`~/weichseltree/quantumflow`) through its lock-aware launcher, not from Windows:
+
+```bash
+cd ~/weichseltree/quantumflow
+mkdir -p outputs/transport/example
+EXP_NAME=transport-example EXP_PRIO=2 \
+EXP_LOG="$PWD/outputs/transport/example/train.log" \
+exp run transport-example --lane gpu -- .venv/bin/python path/to/runner.py
+```
+
+`exp run` serializes GPU work, creates the ExpDash status record, and exports
+`EXP_METRICS_FILE`. Training code can then publish run progress with the built-in bridge:
+
+```python
+from quantumflow.expdash import report
+
+report(step=step, total=total_steps, loss=float(loss), penalty=float(penalty))
+```
+
+The bridge atomically writes the metrics JSON expected by ExpDash, including history for
+curves and ETA calculation. It returns `False` outside an `exp run` process, allowing the
+same runner to work without the dashboard. Keep configurations, source code, and dashboard
+metadata in Git; keep checkpoints, event logs, and generated datasets in `outputs/`, which
+is intentionally ignored.
 
 For local inspection without a third-party dashboard:
 

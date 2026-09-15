@@ -30,6 +30,21 @@ def summarize(base_dir: Path = Path("outputs/transport")) -> None:
 
     print("=" * 85)
 
+    print("\n" + "=" * 65)
+    print("PARETO ANALYSIS: Sliced Wasserstein vs ODE Integration Steps")
+    print("=" * 65)
+    print(f"{'Beta':<8} | {'5 steps':<10} | {'10 steps':<10} | {'20 steps':<10} | {'50 steps':<10} | {'100 steps':<10}")
+    print("-" * 65)
+    for beta_str, d in summary.items():
+        p = d.get("pareto_step_w2", {})
+        s5 = p.get("5", 0.0)
+        s10 = p.get("10", 0.0)
+        s20 = p.get("20", 0.0)
+        s50 = p.get("50", 0.0)
+        s100 = p.get("100", 0.0)
+        print(f"{beta_str:<8} | {s5:<10.4f} | {s10:<10.4f} | {s20:<10.4f} | {s50:<10.4f} | {s100:<10.4f}")
+    print("=" * 65)
+
     summary_file = base_dir / "sweep_summary.json"
     with open(summary_file, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)

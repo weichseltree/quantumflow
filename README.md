@@ -114,6 +114,19 @@ runs also publish their absolute optimizer step and accept independent
 `--step-offset` and `--sample-offset` values, so charts remain monotonic even
 when a promoted run changes batch size.
 
+An optional CPU-lane controller dynamically raises the priority of informative
+middle-range beta values, then performs successive halving without changing
+the fixed pilot: the baseline and two leaders continue to 4,000 steps, and
+the baseline plus leader continue to 8,000 steps. Each continuation starts
+from the previous portable model archive and logs cumulative samples.
+
+```bash
+exp run pilot-adaptive-controller --prio 5 \
+  --sweep transport-beta-adaptive --lane cpu \
+  --log outputs/transport/adaptive/controller.log \
+  -- .venv/bin/python scripts/adaptive_beta_controller.py
+```
+
 The launcher disables JAX's default whole-device memory preallocation. This
 keeps the experiments within the 8 GiB RTX 3070 budget while ExpDash retains
 exclusive scheduling of the GPU lane.

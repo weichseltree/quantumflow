@@ -78,7 +78,7 @@ def train_and_eval(
                 loss=loss,
                 loss_cfm=loss_cfm,
                 loss_iso=loss_iso,
-                beta=beta,
+                penalty=loss_iso,
             )
             print(f"[{step}/{num_steps}] loss: {loss:.5f} (cfm: {loss_cfm:.5f}, iso: {loss_iso:.5f})")
 

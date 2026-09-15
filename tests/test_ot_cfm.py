@@ -4,12 +4,15 @@ import numpy as np
 
 from quantumflow.ot_cfm import (
     compute_eigenvalue_spread,
+    compute_mode_metrics,
     empirical_wasserstein_distance,
     evaluate_potential,
     exact_ot_coupling,
     init_potential_network,
     integrate_ode,
+    load_model_params,
     sample_8gaussians,
+    save_model_params,
     sliced_wasserstein_distance,
     velocity,
 )
@@ -48,10 +51,16 @@ def test_ode_integration_and_metrics() -> None:
     assert len(traj) == 6
 
     spread = compute_eigenvalue_spread(params, x0, t=0.5)
-    assert spread >= 0.0
+    assert spread["mean"] >= 0.0
+    assert spread["max"] >= spread["mean"]
 
     swd = sliced_wasserstein_distance(final_x, x0, key=key)
     assert swd >= 0.0
+
+    modes = compute_mode_metrics(final_x)
+    assert "modes_covered" in modes
+    assert "missing_modes" in modes
+    assert "mode_entropy" in modes
 
 
 def test_empirical_wasserstein_distance_is_true_assignment_metric() -> None:
@@ -63,6 +72,18 @@ def test_empirical_wasserstein_distance_is_true_assignment_metric() -> None:
 def test_empirical_wasserstein_distance_rejects_unequal_samples() -> None:
     with np.testing.assert_raises(ValueError):
         empirical_wasserstein_distance(jnp.zeros((2, 2)), jnp.zeros((3, 2)))
+
+
+def test_model_parameter_archive_round_trip(tmp_path) -> None:
+    params = init_potential_network(jax.random.key(9), hidden_dims=(8, 4))
+    archive = tmp_path / "model.npz"
+    save_model_params(params, archive)
+    loaded = load_model_params(archive)
+
+    for expected, actual in zip(params.weights, loaded.weights, strict=True):
+        np.testing.assert_array_equal(expected, actual)
+    for expected, actual in zip(params.biases, loaded.biases, strict=True):
+        np.testing.assert_array_equal(expected, actual)
 
 
 def test_training_evaluation_is_reproducible(tmp_path) -> None:

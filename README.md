@@ -89,6 +89,30 @@ For local inspection without a third-party dashboard:
 tensorboard --logdir outputs
 ```
 
+### Isotropic-Hessian OT-CFM beta pilot
+
+The multi-seed pilot in issue #11 uses a matched evaluation stream across all
+conditions, exact and sliced Wasserstein metrics, mode-coverage diagnostics,
+Hessian eigenvalue-spread metrics, and an RK4 step-count Pareto analysis.
+Prepare the WSL environment and queue all 39 runs plus the final report job:
+
+```bash
+./scripts/setup_pilot_wsl.sh
+./scripts/launch_expdash_pilot.sh
+exp board
+```
+
+Every run is uniquely named and grouped under the
+`transport-beta-pilot` ExpDash sweep. The final queued job writes
+`outputs/transport/pilot/pilot_analysis.json`, `PILOT_REPORT.md`, a portable
+model archive for every run, and `gallery/` containing a WebXR viewer,
+`video/tape/1` particle tape, and `orchard/bundle/1` bundle for the promoted
+candidate.
+
+The launcher disables JAX's default whole-device memory preallocation. This
+keeps the experiments within the 8 GiB RTX 3070 budget while ExpDash retains
+exclusive scheduling of the GPU lane.
+
 ### Convex kinetic-energy functional
 
 The active convex-functional implementation is JAX-first:

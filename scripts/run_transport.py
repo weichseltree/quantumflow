@@ -16,11 +16,13 @@ from quantumflow import expdash
 from quantumflow.ot_cfm import (
     cfm_loss_step,
     compute_eigenvalue_spread,
+    compute_mode_metrics,
     empirical_wasserstein_distance,
     exact_ot_coupling,
     init_potential_network,
     integrate_ode,
     sample_8gaussians,
+    save_model_params,
     sliced_wasserstein_distance,
 )
 
@@ -33,6 +35,7 @@ def train_and_eval(
     seed: int = 42,
     output_dir: Path | None = None,
     eval_samples: int = 2048,
+    fixed_eval_seed: int | None = 1_000_003,
 ) -> dict[str, float | list[float] | dict[str, float]]:
     if num_steps < 1 or batch_size < 1 or eval_samples < 1:
         raise ValueError("num_steps, batch_size, and eval_samples must be positive")
@@ -98,8 +101,13 @@ def train_and_eval(
 
     # Evaluation
     # 1. Sample quality: integrate x0 -> x1 with RK4 (50 steps)
-    eval_seed = seed + 1_000_003
-    projection_seed = seed + 2_000_003
+    if fixed_eval_seed is not None:
+        eval_seed = fixed_eval_seed
+        projection_seed = fixed_eval_seed + 1_000_000
+    else:
+        eval_seed = seed + 1_000_003
+        projection_seed = seed + 2_000_003
+
     k_eval_x0 = jax.random.key(eval_seed)
     k_eval_target = jax.random.key(eval_seed + 1)
     k_projection = jax.random.key(projection_seed)
@@ -111,25 +119,32 @@ def train_and_eval(
         sliced_wasserstein_distance(generated_samples, target_samples, key=k_projection)
     )
     wasserstein_distance = empirical_wasserstein_distance(generated_samples, target_samples)
+    mode_metrics = compute_mode_metrics(generated_samples)
 
     # 2. Eigenvalue spread along trajectory
-    spreads = []
+    mean_spreads = []
+    max_spreads = []
     for t_idx, x_t in enumerate(trajectory):
         t_val = t_idx / (len(trajectory) - 1)
-        spread_val = compute_eigenvalue_spread(params, x_t[:128], t=t_val)
-        spreads.append(float(spread_val))
-    mean_eig_spread = float(np.mean(spreads))
+        spread_dict = compute_eigenvalue_spread(params, x_t[:128], t=t_val)
+        mean_spreads.append(float(spread_dict["mean"]))
+        max_spreads.append(float(spread_dict["max"]))
+    mean_eig_spread = float(np.mean(mean_spreads))
+    max_eig_spread = float(np.max(max_spreads))
 
     # 3. ODE step count vs quality (Pareto analysis)
     step_counts = [5, 10, 20, 50, 100]
     pareto_sliced = {}
+    pareto_w2 = {}
     ode_function_evaluations = {}
     for sc in step_counts:
         gen_sc, _ = integrate_ode(params, x0_eval, num_steps=sc)
         swd_sc = float(
             sliced_wasserstein_distance(gen_sc, target_samples, key=k_projection)
         )
+        w2_sc = float(empirical_wasserstein_distance(gen_sc, target_samples))
         pareto_sliced[str(sc)] = swd_sc
+        pareto_w2[str(sc)] = w2_sc
         ode_function_evaluations[str(sc)] = 4 * sc
     evaluation_seconds = time.time() - evaluation_start
 
@@ -143,17 +158,26 @@ def train_and_eval(
             "learning_rate": lr,
             "eval_samples": eval_samples,
             "ode_step_counts": step_counts,
+            "fixed_eval_seed": fixed_eval_seed,
         },
         "beta": beta,
         "num_steps": num_steps,
+        "batch_size": batch_size,
         "final_loss": float(aux["loss"]),
         "final_loss_cfm": float(aux["loss_cfm"]),
         "final_loss_iso": float(aux["loss_iso"]),
         "sliced_wasserstein_distance": sliced_distance,
         "empirical_wasserstein_distance": wasserstein_distance,
         "mean_eigenvalue_spread": mean_eig_spread,
-        "trajectory_eigenvalue_spreads": spreads,
+        "max_eigenvalue_spread": max_eig_spread,
+        "trajectory_eigenvalue_spreads": mean_spreads,
+        "trajectory_max_eigenvalue_spreads": max_spreads,
+        "modes_covered": mode_metrics["modes_covered"],
+        "missing_modes": mode_metrics["missing_modes"],
+        "mode_counts": mode_metrics["mode_counts"],
+        "mode_entropy": mode_metrics["mode_entropy"],
         "pareto_step_sliced_wasserstein_distance": pareto_sliced,
+        "pareto_step_empirical_wasserstein_distance": pareto_w2,
         "ode_function_evaluations": ode_function_evaluations,
         "evaluation_seed": eval_seed,
         "projection_seed": projection_seed,
@@ -167,6 +191,7 @@ def train_and_eval(
         output_path.mkdir(parents=True, exist_ok=True)
         with open(output_path / "metrics.json", "w", encoding="utf-8") as f:
             json.dump(metrics, f, indent=2)
+        save_model_params(params, output_path / "model.npz")
         print(f"Saved metrics to {output_path / 'metrics.json'}")
 
     return metrics

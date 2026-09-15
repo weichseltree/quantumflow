@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import NamedTuple
 
 import jax
@@ -16,6 +17,24 @@ from quantumflow.transport import isotropic_hessian_penalty
 class ModelParams(NamedTuple):
     weights: list[jax.Array]
     biases: list[jax.Array]
+
+
+def save_model_params(params: ModelParams, path: Path) -> None:
+    """Save model parameters in a portable, non-executable NumPy archive."""
+    arrays = {"layer_count": np.array(len(params.weights), dtype=np.int64)}
+    for index, (weight, bias) in enumerate(zip(params.weights, params.biases, strict=True)):
+        arrays[f"weight_{index}"] = np.asarray(weight)
+        arrays[f"bias_{index}"] = np.asarray(bias)
+    np.savez_compressed(path, **arrays)
+
+
+def load_model_params(path: Path) -> ModelParams:
+    """Load model parameters written by :func:`save_model_params`."""
+    with np.load(path, allow_pickle=False) as archive:
+        layer_count = int(archive["layer_count"])
+        weights = [jnp.asarray(archive[f"weight_{index}"]) for index in range(layer_count)]
+        biases = [jnp.asarray(archive[f"bias_{index}"]) for index in range(layer_count)]
+    return ModelParams(weights=weights, biases=biases)
 
 
 def init_potential_network(
@@ -158,12 +177,54 @@ def integrate_ode(
     return x, trajectory
 
 
+def compute_mode_metrics(
+    samples: jax.Array | np.ndarray,
+    radius: float = 2.0,
+    threshold: float = 0.5,
+) -> dict[str, float | int | list[int]]:
+    """Compute mode coverage and statistics for 8-Gaussian ring target."""
+    samples_np = np.asarray(samples)
+    angles = np.linspace(0, 2 * np.pi, 9)[:-1]
+    centers = np.stack([radius * np.cos(angles), radius * np.sin(angles)], axis=1)
+
+    dists = cdist(samples_np, centers)
+    closest_mode = np.argmin(dists, axis=1)
+    min_dist = np.min(dists, axis=1)
+
+    valid_mask = min_dist <= threshold
+    valid_modes = closest_mode[valid_mask]
+
+    counts = np.bincount(valid_modes, minlength=8).tolist()
+    total_assigned = int(sum(counts))
+    modes_covered = int(sum(1 for c in counts if c > 0))
+    missing_modes = int(8 - modes_covered)
+
+    if total_assigned > 0:
+        probs = np.array(counts, dtype=float) / total_assigned
+        non_zero_p = probs[probs > 0]
+        entropy = -float(np.sum(non_zero_p * np.log2(non_zero_p)))
+        norm_entropy = float(entropy / 3.0)  # log2(8) = 3.0
+    else:
+        norm_entropy = 0.0
+
+    return {
+        "modes_covered": modes_covered,
+        "missing_modes": missing_modes,
+        "mode_counts": counts,
+        "mode_entropy": norm_entropy,
+        "unassigned_samples": int(len(samples_np) - total_assigned),
+    }
+
+
 def compute_eigenvalue_spread(
     params: ModelParams,
     points: jax.Array,
     t: float,
-) -> jax.Array:
-    """Compute eigenvalue spread |lambda_1 - lambda_2| / (|lambda_1| + |lambda_2| + eps)."""
+) -> dict[str, jax.Array]:
+    """Compute eigenvalue spread |lambda_1 - lambda_2| / (|lambda_1| + |lambda_2| + eps).
+
+    Returns a dict with 'mean' and 'max' spread.
+    """
     def point_hessian(p):
         return jax.hessian(lambda p_: evaluate_potential(params, jnp.array(t), p_))(p)
 
@@ -172,7 +233,10 @@ def compute_eigenvalue_spread(
     l1 = eigvals[:, 0]
     l2 = eigvals[:, 1]
     spread = jnp.abs(l1 - l2) / (jnp.abs(l1) + jnp.abs(l2) + 1e-6)
-    return jnp.mean(spread)
+    return {
+        "mean": jnp.mean(spread),
+        "max": jnp.max(spread),
+    }
 
 
 def sliced_wasserstein_distance(

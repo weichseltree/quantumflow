@@ -149,6 +149,44 @@ The launcher disables JAX's default whole-device memory preallocation. This
 keeps the experiments within the 8 GiB RTX 3070 budget while ExpDash retains
 exclusive scheduling of the GPU lane.
 
+### Quick gallery demo (no full pilot required)
+
+To exercise the export pipeline and preview sample 2D/3D/WebXR/Orchard
+artifacts without running the 39-run beta pilot, train a tiny model and
+export a demo gallery in one command:
+
+```bash
+python scripts/generate_demo_gallery.py --output-dir outputs/demo_gallery/demo
+```
+
+This trains a small OT-CFM model (a few seconds on CPU, ~300 steps by
+default) to `outputs/demo_gallery/demo/model.npz`, then writes:
+
+- `gallery/tape/` -- a `video/tape/1` trajectory tape plus `webxr_particles.json`
+- `gallery/index.html` -- an offline-capable WebXR viewer (vendored Three.js assets)
+- `gallery/bundles/` -- a verified `orchard/bundle/1` bundle (skip with `--no-bundle`)
+- `gallery/gallery.json` -- a manifest recording provenance and file locations,
+  in the same `quantumflow/gallery/2` schema used by the full pilot's
+  representative gallery
+
+Building the tape, viewer, and bundle requires the optional Orchard stack
+described above; if it isn't installed the command fails with an explicit
+message naming the missing package. Pass `--skip-train` to reuse an existing
+`model.npz` instead of retraining, and `--no-bundle` to skip the bundle step.
+
+Serve the gallery locally to view it in a browser (or a WebXR headset on the
+same network):
+
+```bash
+python -m http.server --directory outputs/demo_gallery/demo/gallery 8000
+```
+
+Then open `http://localhost:8000/` (or the host machine's LAN address from a
+headset). `outputs/` is intentionally gitignored, so demo artifacts are never
+committed. To publish a gallery -- for example via GitHub Pages -- copy the
+contents of `gallery/` into the target branch or a workflow's static-hosting
+artifact directory rather than committing it under `outputs/`.
+
 ### Convex kinetic-energy functional
 
 The active convex-functional implementation is JAX-first:

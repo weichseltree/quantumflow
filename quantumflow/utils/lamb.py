@@ -23,11 +23,13 @@ import tensorflow as tf
 
 import quantumflow
 
+
 def quantumflow_lr_LAMB(learning_rate, **kwargs):
     if not isinstance(learning_rate, float):
         learning_rate = quantumflow.instantiate(learning_rate)
-        
+
     return LAMB(learning_rate=learning_rate, **kwargs)
+
 
 class LAMB(tf.keras.optimizers.Optimizer):
     """Optimizer that implements the Layer-wise Adaptive Moments (LAMB).
@@ -38,14 +40,14 @@ class LAMB(tf.keras.optimizers.Optimizer):
 
     def __init__(
         self,
-        learning_rate = 0.001,
-        beta_1 = 0.9,
-        beta_2 = 0.999,
-        epsilon = 1e-6,
-        weight_decay_rate = 0.0,
-        exclude_from_weight_decay = None,
-        exclude_from_layer_adaptation = None,
-        name = "LAMB",
+        learning_rate=0.001,
+        beta_1=0.9,
+        beta_2=0.999,
+        epsilon=1e-6,
+        weight_decay_rate=0.0,
+        exclude_from_weight_decay=None,
+        exclude_from_layer_adaptation=None,
+        name="LAMB",
         **kwargs,
     ):
         """Construct a new LAMB optimizer.
@@ -219,9 +221,7 @@ class LAMB(tf.keras.optimizers.Optimizer):
         config.update(
             {
                 "learning_rate": self._serialize_hyperparameter("learning_rate"),
-                "weight_decay_rate": self._serialize_hyperparameter(
-                    "weight_decay_rate"
-                ),
+                "weight_decay_rate": self._serialize_hyperparameter("weight_decay_rate"),
                 "decay": self._serialize_hyperparameter("decay"),
                 "beta_1": self._serialize_hyperparameter("beta_1"),
                 "beta_2": self._serialize_hyperparameter("beta_2"),

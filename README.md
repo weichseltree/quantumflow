@@ -162,8 +162,32 @@ derivative = functional_derivative(params, density)
 Its ICNN parameterization applies non-negative hidden/output connections and Softplus
 activations, guaranteeing convexity with respect to the discretized density. Use
 `potential_from_kinetic_derivative(derivative, chemical_potential)` to implement
-`v(x) = mu - delta T[n] / delta n(x)`. Use `make_training_step(optimizer)` to obtain a
-JIT-compiled update function for a fixed Optax optimizer.
+`v(x) = mu - delta T[n] / delta n(x)`. Use `make_training_step(optimizer)` or
+`make_composite_training_step(optimizer)` to obtain a JIT-compiled update function for joint
+energy and functional derivative training.
+
+Multi-dimensional (>1D) experiments in 2D and 3D can be run directly via:
+
+```bash
+python scripts/run_convex_multidim.py --dimension 2 --grid-points 24 --orbitals 3
+python scripts/run_convex_multidim.py --dimension 3 --grid-points 10 --orbitals 2
+```
+
+### Visualizations, Videos & Grove 3D Exhibition
+
+QuantumFlow includes visualization tools and export pipelines for figures, video animations, and
+spatial exhibitions:
+
+```bash
+# Render publication-ready figures (PNG, SVG)
+python scripts/render_figures.py --output-dir outputs/figures
+
+# Render animated videos (GIF, MP4) of variational density relaxation & OT transport
+python scripts/render_video.py --output-dir outputs/videos --type all --format gif
+
+# Build complete 3D Grove exhibition package (figures, videos, and glowing WebGL volumetric shaders)
+python scripts/export_grove_exhibition.py --output-dir outputs/grove_exhibition
+```
 
 ## Clean notebooks
 

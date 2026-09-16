@@ -44,8 +44,8 @@ that repository alongside this checkout and install its workspace packages:
 
 ```bash
 git clone https://github.com/weichseltree/orchard.git
-python -m pip install -e orchard/packages/tape -e orchard
-python -m pytest -m orchard tests/test_orchard_export.py
+python -m pip install -e orchard/packages/score -e orchard/packages/tape -e orchard
+python -m pytest -m orchard tests/test_orchard_export.py tests/test_generate_demo_gallery.py
 ```
 
 The regular test command deliberately excludes these marked tests so supported

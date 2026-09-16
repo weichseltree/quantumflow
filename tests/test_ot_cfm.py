@@ -1,15 +1,19 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from quantumflow.ot_cfm import (
     compute_eigenvalue_spread,
+    compute_mode_metrics,
     empirical_wasserstein_distance,
     evaluate_potential,
     exact_ot_coupling,
     init_potential_network,
     integrate_ode,
+    load_model_params,
     sample_8gaussians,
+    save_model_params,
     sliced_wasserstein_distance,
     velocity,
 )
@@ -48,10 +52,16 @@ def test_ode_integration_and_metrics() -> None:
     assert len(traj) == 6
 
     spread = compute_eigenvalue_spread(params, x0, t=0.5)
-    assert spread >= 0.0
+    assert spread["mean"] >= 0.0
+    assert spread["max"] >= spread["mean"]
 
     swd = sliced_wasserstein_distance(final_x, x0, key=key)
     assert swd >= 0.0
+
+    modes = compute_mode_metrics(final_x)
+    assert "modes_covered" in modes
+    assert "missing_modes" in modes
+    assert "mode_entropy" in modes
 
 
 def test_empirical_wasserstein_distance_is_true_assignment_metric() -> None:
@@ -63,6 +73,18 @@ def test_empirical_wasserstein_distance_is_true_assignment_metric() -> None:
 def test_empirical_wasserstein_distance_rejects_unequal_samples() -> None:
     with np.testing.assert_raises(ValueError):
         empirical_wasserstein_distance(jnp.zeros((2, 2)), jnp.zeros((3, 2)))
+
+
+def test_model_parameter_archive_round_trip(tmp_path) -> None:
+    params = init_potential_network(jax.random.key(9), hidden_dims=(8, 4))
+    archive = tmp_path / "model.npz"
+    save_model_params(params, archive)
+    loaded = load_model_params(archive)
+
+    for expected, actual in zip(params.weights, loaded.weights, strict=True):
+        np.testing.assert_array_equal(expected, actual)
+    for expected, actual in zip(params.biases, loaded.biases, strict=True):
+        np.testing.assert_array_equal(expected, actual)
 
 
 def test_training_evaluation_is_reproducible(tmp_path) -> None:
@@ -84,3 +106,48 @@ def test_training_evaluation_is_reproducible(tmp_path) -> None:
     )
     for field in deterministic_fields:
         np.testing.assert_equal(first[field], second[field])
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_training_continuation_reports_absolute_budget(tmp_path, monkeypatch, legacy) -> None:
+    initial_dir = tmp_path / "initial"
+    full_dir = tmp_path / "full"
+    continued_dir = tmp_path / "continued"
+    train_and_eval(beta=0.0, num_steps=2, batch_size=4, seed=3, eval_samples=8, output_dir=full_dir)
+    train_and_eval(
+        beta=0.0,
+        num_steps=1,
+        batch_size=4,
+        seed=3,
+        eval_samples=8,
+        output_dir=initial_dir,
+    )
+    if legacy:
+        (initial_dir / "checkpoint.npz").unlink()
+    sidecar = tmp_path / "continuation.metrics"
+    monkeypatch.setenv("EXP_METRICS_FILE", str(sidecar))
+    continued = train_and_eval(
+        beta=0.0,
+        num_steps=1,
+        batch_size=4,
+        seed=3,
+        eval_samples=8,
+        init_model=initial_dir / "model.npz",
+        step_offset=1,
+        output_dir=continued_dir,
+    )
+    assert continued["start_step"] == 1
+    assert continued["end_step"] == 2
+    assert continued["start_samples"] == 4
+    assert continued["end_samples"] == 8
+    full = load_model_params(full_dir / "model.npz")
+    split = load_model_params(continued_dir / "model.npz")
+    for expected, actual in zip(
+        jax.tree_util.tree_leaves(full), jax.tree_util.tree_leaves(split), strict=True
+    ):
+        np.testing.assert_array_equal(expected, actual)
+    import json
+
+    assert [row[1] for row in json.loads(sidecar.read_text())["history"]] == [4, 8]
+    with pytest.raises(ValueError, match="must match parent"):
+        train_and_eval(init_model=initial_dir / "model.npz", seed=3, batch_size=4, step_offset=99)

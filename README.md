@@ -31,10 +31,25 @@ Run the complete local validation suite before opening a pull request:
 
 ```bash
 python -m pip check
-python -m pytest
+python -m pytest -m "not orchard"
 python -m ruff check quantumflow/cli.py quantumflow/noninteracting_1d/convex.py tests
 python -m ruff format --check quantumflow/cli.py quantumflow/noninteracting_1d/convex.py tests
 ```
+
+Orchard export is an optional integration supported on Python 3.12 or newer.
+The official Orchard and `orchard-tape` packages are maintained in the
+[`weichseltree/orchard`](https://github.com/weichseltree/orchard) repository,
+not published as QuantumFlow dependencies. To run the integration tests, clone
+that repository alongside this checkout and install its workspace packages:
+
+```bash
+git clone https://github.com/weichseltree/orchard.git
+python -m pip install -e orchard/packages/tape -e orchard
+python -m pytest -m orchard tests/test_orchard_export.py
+```
+
+The regular test command deliberately excludes these marked tests so supported
+Python 3.10 and 3.11 environments do not require the Orchard stack.
 
 ## Running experiments
 
@@ -88,6 +103,48 @@ For local inspection without a third-party dashboard:
 ```bash
 tensorboard --logdir outputs
 ```
+
+### Isotropic-Hessian OT-CFM beta pilot
+
+The multi-seed pilot in issue #11 uses a matched evaluation stream across all
+conditions, exact and sliced Wasserstein metrics, mode-coverage diagnostics,
+Hessian eigenvalue-spread metrics, and an RK4 step-count Pareto analysis.
+Prepare the WSL environment and queue all 39 runs plus the final report job:
+
+```bash
+./scripts/setup_pilot_wsl.sh
+./scripts/launch_expdash_pilot.sh
+exp board
+```
+
+Every run is uniquely named and grouped under the
+`transport-beta-pilot` ExpDash sweep. The final queued job writes
+`outputs/transport/pilot/pilot_analysis.json`, `PILOT_REPORT.md`, a portable
+model archive for every run, and `gallery/` containing a WebXR viewer,
+`video/tape/1` particle tape, and `orchard/bundle/1` bundle for the promoted
+candidate.
+
+ExpDash progress uses cumulative samples processed as its x-axis. Continuation
+runs also publish their absolute optimizer step and accept independent
+`--step-offset` and `--sample-offset` values, so charts remain monotonic even
+when a promoted run changes batch size.
+
+An optional CPU-lane controller dynamically raises the priority of informative
+middle-range beta values, then performs successive halving without changing
+the fixed pilot: the baseline and two leaders continue to 4,000 steps, and
+the baseline plus leader continue to 8,000 steps. Each continuation starts
+from the previous portable model archive and logs cumulative samples.
+
+```bash
+exp run pilot-adaptive-controller --prio 5 \
+  --sweep transport-beta-adaptive --lane cpu \
+  --log outputs/transport/adaptive/controller.log \
+  -- .venv/bin/python scripts/adaptive_beta_controller.py
+```
+
+The launcher disables JAX's default whole-device memory preallocation. This
+keeps the experiments within the 8 GiB RTX 3070 budget while ExpDash retains
+exclusive scheduling of the GPU lane.
 
 ### Convex kinetic-energy functional
 

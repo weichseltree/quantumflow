@@ -19,6 +19,7 @@ dependencies = [
     "optax>=0.2.4",
     "pandas>=2.1",
     "ruamel.yaml>=0.18",
+    "scipy>=1.12",
 ]
 
 [project.optional-dependencies]
@@ -39,6 +40,9 @@ include = ["quantumflow*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "orchard: integration tests requiring the official Orchard stack (Python >=3.12)",
+]
 
 [tool.ruff]
 target-version = "py310"

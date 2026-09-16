@@ -180,8 +180,7 @@ def train_and_eval(
                 temporary.write_text(json.dumps(progress, allow_nan=False), encoding="utf-8")
                 temporary.replace(output_dir / "progress.json")
             print(
-                f"[{step}/{num_steps}] loss: {loss:.5f} "
-                f"(cfm: {loss_cfm:.5f}, iso: {loss_iso:.5f})"
+                f"[{step}/{num_steps}] loss: {loss:.5f} (cfm: {loss_cfm:.5f}, iso: {loss_iso:.5f})"
             )
 
     training_seconds = time.time() - start_time

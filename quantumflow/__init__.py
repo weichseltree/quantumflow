@@ -50,8 +50,8 @@ class Dataset():
 
 def __getattr__(name):
     """Lazily import optional package namespaces."""
-    if name == "utils":
-        module = importlib.import_module(f"{__name__}.utils")
+    if name in ("utils", "jax", "multidim", "transport", "ot_cfm", "expdash"):
+        module = importlib.import_module(f"{__name__}.{name}")
         globals()[name] = module
         return module
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

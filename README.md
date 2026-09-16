@@ -173,6 +173,22 @@ python scripts/run_convex_multidim.py --dimension 2 --grid-points 24 --orbitals 
 python scripts/run_convex_multidim.py --dimension 3 --grid-points 10 --orbitals 2
 ```
 
+### Visualizations, Videos & Grove 3D Exhibition
+
+QuantumFlow includes visualization tools and export pipelines for figures, video animations, and
+spatial exhibitions:
+
+```bash
+# Render publication-ready figures (PNG, SVG)
+python scripts/render_figures.py --output-dir outputs/figures
+
+# Render animated videos (GIF, MP4) of variational density relaxation & OT transport
+python scripts/render_video.py --output-dir outputs/videos --type all --format gif
+
+# Build complete 3D Grove exhibition package (figures, videos, and glowing WebGL volumetric shaders)
+python scripts/export_grove_exhibition.py --output-dir outputs/grove_exhibition
+```
+
 ## Clean notebooks
 
 To strip cell outputs when notebooks are committed, configure the repository-local filter:

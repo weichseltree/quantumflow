@@ -78,9 +78,12 @@ checkout (`~/weichseltree/quantumflow`) through its lock-aware launcher, not fro
 ```bash
 cd ~/weichseltree/quantumflow
 mkdir -p outputs/transport/example
-EXP_NAME=transport-example EXP_PRIO=2 \
-EXP_LOG="$PWD/outputs/transport/example/train.log" \
-exp run transport-example --lane gpu -- .venv/bin/python path/to/runner.py
+exp run transport-example \
+  --prio 2 \
+  --sweep transport-example \
+  --lane gpu \
+  --log "$PWD/outputs/transport/example/train.log" \
+  -- .venv/bin/python path/to/runner.py
 ```
 
 `exp run` serializes GPU work, creates the ExpDash status record, and exports

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
-import hashlib
+import tempfile
 import time
 from pathlib import Path
 
@@ -30,6 +31,34 @@ from quantumflow.ot_cfm import (
     save_model_params,
     sliced_wasserstein_distance,
 )
+
+
+def _atomic_write_json(
+    destination: Path, payload: dict, *, indent: int | None = None
+) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = temporary.name
+            json.dump(payload, temporary, allow_nan=False, indent=indent)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, destination)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass
 
 
 def train_and_eval(
@@ -170,15 +199,12 @@ def train_and_eval(
             }
             history.append([time.time(), absolute_samples, values])
             if output_dir:
-                output_dir.mkdir(parents=True, exist_ok=True)
                 progress = {
                     "history": history, "step": absolute_samples,
                     "total": sample_offset + num_steps * batch_size,
                     "values": {**values, "progress_unit": "samples"},
                 }
-                temporary = output_dir / "progress.tmp"
-                temporary.write_text(json.dumps(progress, allow_nan=False), encoding="utf-8")
-                temporary.replace(output_dir / "progress.json")
+                _atomic_write_json(output_dir / "progress.json", progress)
             print(
                 f"[{step}/{num_steps}] loss: {loss:.5f} (cfm: {loss_cfm:.5f}, iso: {loss_iso:.5f})"
             )
@@ -308,10 +334,7 @@ def train_and_eval(
 
     if output_dir:
         output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-        with open(output_path / "metrics.tmp", "w", encoding="utf-8") as f:
-            json.dump(metrics, f, indent=2, allow_nan=False)
-        (output_path / "metrics.tmp").replace(output_path / "metrics.json")
+        _atomic_write_json(output_path / "metrics.json", metrics, indent=2)
         print(f"Saved metrics to {output_path / 'metrics.json'}")
 
     return metrics

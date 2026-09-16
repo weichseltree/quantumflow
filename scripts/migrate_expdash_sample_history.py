@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
+import tempfile
 from pathlib import Path
 
 
@@ -15,6 +17,31 @@ def batch_size_from_command(command: str) -> int:
         return int(tokens[index + 1])
     except (ValueError, IndexError) as error:
         raise ValueError("status command has no valid --batch-size") from error
+
+
+def atomic_write_json(destination: Path, payload: dict) -> None:
+    temporary_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = temporary.name
+            json.dump(payload, temporary)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, destination)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass
 
 
 def migrate_record(status_path: Path) -> bool:
@@ -51,9 +78,7 @@ def migrate_record(status_path: Path) -> bool:
         if len(entry) >= 2 and isinstance(entry[1], int):
             entry[1] *= batch_size
 
-    temporary = metrics_path.with_suffix(".metrics.tmp")
-    temporary.write_text(json.dumps(payload), encoding="utf-8")
-    temporary.replace(metrics_path)
+    atomic_write_json(metrics_path, payload)
     return True
 
 

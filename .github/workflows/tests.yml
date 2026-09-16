@@ -49,6 +49,7 @@ jobs:
       - name: Install project and official Orchard stack
         run: |
           python -m pip install -e ".[dev]"
+          python -m pip install -e orchard/packages/score
           python -m pip install -e orchard/packages/tape
           python -m pip install -e orchard
       - name: Validate dependencies

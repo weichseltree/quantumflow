@@ -53,10 +53,14 @@ def test_report_rejects_invalid_progress(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
 def test_continuation_copies_parent_sample_history(monkeypatch, tmp_path):
     parent = tmp_path / "parent.json"
-    parent.write_text(json.dumps({
-        "values": {"progress_unit": "samples"},
-        "history": [[1.0, 512000, {"loss": 0.2}]],
-    }))
+    parent.write_text(
+        json.dumps(
+            {
+                "values": {"progress_unit": "samples"},
+                "history": [[1.0, 512000, {"loss": 0.2}]],
+            }
+        )
+    )
     child = tmp_path / "child.metrics"
     monkeypatch.setenv("EXP_METRICS_FILE", str(child))
     expdash.resume_history(parent)

@@ -25,10 +25,7 @@ STEPS = ("5", "10", "20", "50", "100")
 def metric(beta: float, seed: int, endpoint_delta: float = 0.0) -> dict:
     baseline = 1.0 + seed * 0.1
     endpoint = baseline + (endpoint_delta if beta else 0.0)
-    pareto = {
-        step: endpoint + 0.5 / int(step)
-        for step in STEPS
-    }
+    pareto = {step: endpoint + 0.5 / int(step) for step in STEPS}
     return {
         "schema_version": 2,
         "seed": seed,
@@ -117,9 +114,7 @@ def test_analysis_allows_no_promotions_when_candidate_is_worse() -> None:
     analysis = analyze(complete_results(0.1))
 
     assert analysis["promoted_candidates"] == []
-    assert "endpoint_empirical_w2_sacrifice" in analysis["all_candidates"][0][
-        "promotion_failures"
-    ]
+    assert "endpoint_empirical_w2_sacrifice" in analysis["all_candidates"][0]["promotion_failures"]
     report = render_report(analysis)
     assert "no beta is promoted" in report
     assert "not adjusted for multiple comparisons" in report
@@ -127,9 +122,7 @@ def test_analysis_allows_no_promotions_when_candidate_is_worse() -> None:
 
 def test_missing_pareto_metric_is_rejected_instead_of_defaulting_to_zero() -> None:
     results = complete_results(-0.2)
-    del results["actual-directory-0.01-1"][
-        "pareto_step_empirical_wasserstein_distance"
-    ]["5"]
+    del results["actual-directory-0.01-1"]["pareto_step_empirical_wasserstein_distance"]["5"]
 
     with pytest.raises(PilotValidationError, match="must have exactly steps"):
         analyze(results)

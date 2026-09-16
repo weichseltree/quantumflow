@@ -113,9 +113,7 @@ def test_training_continuation_reports_absolute_budget(tmp_path, monkeypatch, le
     initial_dir = tmp_path / "initial"
     full_dir = tmp_path / "full"
     continued_dir = tmp_path / "continued"
-    train_and_eval(
-        beta=0.0, num_steps=2, batch_size=4, seed=3, eval_samples=8, output_dir=full_dir
-    )
+    train_and_eval(beta=0.0, num_steps=2, batch_size=4, seed=3, eval_samples=8, output_dir=full_dir)
     train_and_eval(
         beta=0.0,
         num_steps=1,

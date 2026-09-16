@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import tempfile
 import time
 from pathlib import Path
 from threading import Lock
@@ -21,15 +22,50 @@ _history_by_file: dict[str, list[list[object]]] = {}
 _lock = Lock()
 
 
+def _atomic_write_json(destination: Path, payload: dict[str, object]) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = temporary.name
+            json.dump(payload, temporary)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, destination)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass
+
+
 def validate_history(history: object) -> list[list[object]]:
     if not isinstance(history, list):
         raise ValueError("ExpDash history must be a list")
     last_step = -1
     for entry in history:
         if (not isinstance(entry, list) or len(entry) != 3
-                or not isinstance(entry[0], (int, float)) or not math.isfinite(entry[0])
-                or not isinstance(entry[1], int) or entry[1] < last_step
-                or not isinstance(entry[2], dict)):
+                or isinstance(entry[0], bool)
+                or not isinstance(entry[0], (int, float))
+                or not math.isfinite(entry[0])
+                or type(entry[1]) is not int
+                or entry[1] < last_step
+                or not isinstance(entry[2], dict)
+                or any(
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(value)
+                    for value in entry[2].values()
+                )):
             raise ValueError("ExpDash history must contain ordered [timestamp, step, metrics] rows")
         last_step = entry[1]
     return history
@@ -125,8 +161,5 @@ def report(
             "values": values,
             "history": history,
         }
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        temporary = destination.with_name(f"{destination.name}.tmp")
-        temporary.write_text(json.dumps(payload), encoding="utf-8")
-        temporary.replace(destination)
+        _atomic_write_json(destination, payload)
     return True

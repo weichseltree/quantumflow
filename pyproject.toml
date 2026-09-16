@@ -40,6 +40,7 @@ include = ["quantumflow*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = [
     "orchard: integration tests requiring the official Orchard stack (Python >=3.12)",
 ]

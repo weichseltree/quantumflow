@@ -1,3 +1,4 @@
+import importlib
 import json
 from pathlib import Path
 
@@ -14,8 +15,19 @@ _TINY_KWARGS = {
 }
 
 
-def test_training_writes_model_before_gallery_export_is_attempted(tmp_path: Path) -> None:
+def test_training_writes_model_before_gallery_export_is_attempted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     output_dir = tmp_path / "demo"
+
+    real_import = importlib.import_module
+
+    def missing(name: str, package: str | None = None):
+        if name == "orchard_tape":
+            raise ImportError("not installed")
+        return real_import(name, package)
+
+    monkeypatch.setattr(importlib, "import_module", missing)
 
     with pytest.raises(RuntimeError, match="official 'orchard_tape' package"):
         generate_demo_gallery(output_dir, **_TINY_KWARGS)

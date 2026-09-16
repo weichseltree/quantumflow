@@ -31,10 +31,25 @@ Run the complete local validation suite before opening a pull request:
 
 ```bash
 python -m pip check
-python -m pytest
+python -m pytest -m "not orchard"
 python -m ruff check quantumflow/cli.py quantumflow/noninteracting_1d/convex.py tests
 python -m ruff format --check quantumflow/cli.py quantumflow/noninteracting_1d/convex.py tests
 ```
+
+Orchard export is an optional integration supported on Python 3.12 or newer.
+The official Orchard and `orchard-tape` packages are maintained in the
+[`weichseltree/orchard`](https://github.com/weichseltree/orchard) repository,
+not published as QuantumFlow dependencies. To run the integration tests, clone
+that repository alongside this checkout and install its workspace packages:
+
+```bash
+git clone https://github.com/weichseltree/orchard.git
+python -m pip install -e orchard/packages/tape -e orchard
+python -m pytest -m orchard tests/test_orchard_export.py
+```
+
+The regular test command deliberately excludes these marked tests so supported
+Python 3.10 and 3.11 environments do not require the Orchard stack.
 
 ## Running experiments
 

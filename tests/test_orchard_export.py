@@ -13,6 +13,8 @@ from quantumflow.orchard_export import (
 )
 from quantumflow.ot_cfm import ModelParams
 
+pytestmark = pytest.mark.orchard
+
 
 def _linear_potential() -> ModelParams:
     # Phi(t, q1, q2) = t + 2*q1 + 3*q2: v=(2,3), dPhi/dt along flow = 14.
@@ -50,9 +52,7 @@ def test_export_round_trips_without_clipping_and_has_correct_lift_velocity(
     assert "gauge" in header["meta"]["potential_gauge"]
     assert trailer["clamped_positions_total"] == 0
     assert len(reader.frames) == payload["num_steps"] + 1 == 5
-    assert [record["t"] for record in reader.frames] == pytest.approx(
-        np.linspace(0.0, 1.0, 5)
-    )
+    assert [record["t"] for record in reader.frames] == pytest.approx(np.linspace(0.0, 1.0, 5))
 
     origin = np.asarray(header["meta"]["coordinate_convention"]["tape_origin"])
     tolerance = max(header["box"]) / 65535.0 + 1e-6

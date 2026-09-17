@@ -108,9 +108,42 @@ def laplacian_matrix(grid: Grid) -> np.ndarray:
     raise ValueError(f"Unsupported dimension {grid.dimension}")
 
 
+def laplacian_matrix_sparse(grid: Grid) -> sp.csr_matrix:
+    """Build the d-dimensional grid Laplacian as a sparse operator.
+
+    Identical to :func:`laplacian_matrix` in value, but the Kronecker products
+    are taken over sparse factors. The dense builder allocates
+    ``total_points**2`` doubles, which is 1.5 GB at a 24-point cubic grid and
+    8.6 GB at 32; the sparse operator holds ``2 * dimension + 1`` diagonals and
+    makes the resolutions an isosurface needs reachable.
+    """
+    l_1ds = [
+        sp.csr_matrix(laplacian_matrix_1d(n, h))
+        for n, h in zip(grid.points_per_dim, grid.spacings)
+    ]
+    if grid.dimension == 1:
+        return l_1ds[0].tocsr()
+
+    eyes = [sp.identity(n, dtype=np.float64, format="csr") for n in grid.points_per_dim]
+    total = None
+    for axis, l_1d in enumerate(l_1ds):
+        # The term acting along `axis` is the identity on every other axis.
+        factors = [l_1d if index == axis else eyes[index] for index in range(grid.dimension)]
+        term = factors[0]
+        for factor in factors[1:]:
+            term = sp.kron(term, factor, format="csr")
+        total = term if total is None else total + term
+    return total.tocsr()
+
+
 def kinetic_operator(grid: Grid) -> np.ndarray:
     """Return kinetic energy operator T = -1/2 nabla^2."""
     return -0.5 * laplacian_matrix(grid)
+
+
+def kinetic_operator_sparse(grid: Grid) -> sp.csr_matrix:
+    """Return the sparse kinetic energy operator T = -1/2 nabla^2."""
+    return -0.5 * laplacian_matrix_sparse(grid)
 
 
 def solve_multidim_schroedinger(
@@ -150,16 +183,44 @@ def solve_multidim_schroedinger(
             f"Potential size {v_flat.shape[0]} does not match grid total points {grid.total_points}"
         )
 
-    t_mat = kinetic_operator(grid) if kinetic_matrix is None else kinetic_matrix
-    h_mat = t_mat + np.diag(v_flat)
+    if kinetic_matrix is None:
+        # Past a thousand points the dense Kronecker builder is the memory
+        # ceiling, not the eigensolver: it wants total_points**2 doubles.
+        kinetic_matrix = (
+            kinetic_operator(grid)
+            if grid.total_points <= 1000
+            else kinetic_operator_sparse(grid)
+        )
 
-    if grid.total_points <= 1000:
+    if sp.issparse(kinetic_matrix):
+        h_mat = (kinetic_matrix + sp.diags(v_flat)).tocsr()
+    else:
+        h_mat = kinetic_matrix + np.diag(v_flat)
+
+    if not sp.issparse(h_mat) and grid.total_points <= 1000:
         evals, evecs = scipy.linalg.eigh(h_mat, subset_by_index=[0, num_orbitals - 1])
         orbital_energies = evals
         wavefunctions = evecs
     else:
-        h_sparse = sp.csr_matrix(h_mat)
-        evals, evecs = scipy.sparse.linalg.eigsh(h_sparse, k=num_orbitals, which="SA")
+        h_sparse = h_mat if sp.issparse(h_mat) else sp.csr_matrix(h_mat)
+        # ARPACK starts from a random vector unless given one. Inside a
+        # degenerate subspace the basis it returns is then different every
+        # call, so a density summed over part of a degenerate set -- and any
+        # geometry exported from it -- would change run to run, which a bundle
+        # recording a sha256 cannot live with. A fixed start makes the export
+        # reproducible; it does not make a split multiplet physical, which is
+        # what `degenerate_cut` is for.
+        start = np.ones(grid.total_points, dtype=np.float64)
+        # `sigma` shifts the spectrum so the solver converges on the lowest
+        # states directly; 'SA' on an unshifted operator stalls on the fine
+        # grids an isosurface needs.
+        evals, evecs = scipy.sparse.linalg.eigsh(
+            h_sparse,
+            k=num_orbitals,
+            sigma=float(v_flat.min()) - 1.0,
+            which="LM",
+            v0=start,
+        )
         sort_idx = np.argsort(evals)
         orbital_energies = evals[sort_idx]
         wavefunctions = evecs[:, sort_idx]

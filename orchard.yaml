@@ -1,0 +1,334 @@
+name: quantumflow
+title: QuantumFlow
+path: /home/manuel/weichseltree/quantumflow
+remote: git@github.com-weichseltree:weichseltree/quantumflow.git
+
+question: >-
+  An electron cloud is a far simpler thing than the waves that make it — is the
+  cloud alone enough to tell you everything about the matter it came from?
+
+status: active
+stage: planted
+gpu: jax
+
+phenomena:
+  - id: hundred-thousand-wells
+    title: A hundred thousand solved wells
+    hook: >-
+      Every one of these was solved exactly, to the last digit. The machine's
+      whole job is to never need the exact solution again.
+    evidence: datasets/snyder_2012/train/dataset.hdf5
+    hero: false
+
+  - id: nodes-cost-energy
+    title: The energy lives at the nodes
+    hook: >-
+      Paint an orbital with its own kinetic energy and the light collects in
+      thin bands around the places where the wave passes through zero. That is
+      the whole reason one orbital sits above another.
+    evidence: results/models/manifest-standing.json
+    hero: true
+
+  - id: convexity-you-can-falsify
+    title: A curve with nowhere to hide
+    hook: >-
+      Two bowls, same network, same seed, one constraint switched off. Look for
+      a chord that cuts below the surface: on the constrained bowl there is
+      not one, and you are welcome to hunt.
+    evidence: results/models/manifest-bowls.json
+    hero: true
+
+  - id: penalty-that-cost
+    title: A constraint we believed in, measured making it worse
+    hook: >-
+      We had a good reason to think this penalty would help. It cost accuracy
+      at every strength we tried, and the cost grew as we leaned on it harder.
+    evidence: outputs/transport/pilot/PILOT_REPORT.md
+    hero: false
+
+  - id: modes-held
+    title: Whatever it cost, it never lost a mode
+    hook: >-
+      Every condition, every seed, all eight modes still covered — the penalty
+      damaged the fit without ever collapsing it.
+    evidence: outputs/transport/pilot/pilot_analysis.json
+    hero: false
+
+  - id: evolution-found-zero
+    title: Sixteen agents, eight generations, and the winner chose almost nothing
+    hook: >-
+      Left free to pick the penalty strength for themselves, a bred population
+      converged on 0.00037 — the hard way round to the same answer.
+    evidence: outputs/transport/pbt/PBT_REPORT.md
+    hero: false
+
+artefacts:
+  - kind: tape
+    path: outputs/transport/pilot/gallery/tape/header.json
+    title: OT-CFM particle flow, the retained baseline
+    produced_by: python scripts/finalize_beta_pilot.py
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+
+  - kind: still
+    path: outputs/transport/pilot/gallery/bundles/61d3664347750753/poster.png
+    title: Flow poster
+    produced_by: python scripts/finalize_beta_pilot.py
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+
+  - kind: tape
+    path: outputs/transport/pbt/gallery/tape/header.json
+    title: PBT champion flow
+    produced_by: python scripts/run_pbt.py
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+
+  - kind: still
+    path: outputs/transport/pbt/gallery/bundles/dcef6c52ac12f9a2/poster.png
+    title: PBT champion poster
+    produced_by: python scripts/run_pbt.py
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+
+  - kind: tape
+    path: results/tape/shooting/header.json
+    title: The Shooting Gallery — quantization found by hand
+    produced_by: >-
+      exp run quantumflow-shooting-tape --prio 10 --lane cpu --
+      .venv/bin/python scripts/export_shooting_tape.py
+      --output-dir results/tape/shooting
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+
+  - kind: model
+    path: results/models/convex-bowl.glb
+    title: The convex kinetic-energy functional, with its chord test
+    produced_by: >-
+      exp run quantumflow-models-bowls --prio 10 --lane cpu --
+      .venv/bin/python scripts/export_orchard_models.py --which bowls
+      --output-dir results/models
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+
+  - kind: model
+    path: results/models/unconstrained-bowl.glb
+    title: The same network with the constraint removed
+    produced_by: >-
+      exp run quantumflow-models-bowls --prio 10 --lane cpu --
+      .venv/bin/python scripts/export_orchard_models.py --which bowls
+      --output-dir results/models
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+
+  - kind: model
+    path: results/models/orbital-0.glb
+    title: The ground state — one lobe, no node
+    produced_by: >-
+      exp run quantumflow-models --prio 10 --lane cpu --
+      .venv/bin/python scripts/export_orchard_models.py --which standing
+      --output-dir results/models
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: model
+    path: results/models/orbital-1.glb
+    title: The first excited state — one node
+    produced_by: >-
+      exp run quantumflow-models --prio 10 --lane cpu --
+      .venv/bin/python scripts/export_orchard_models.py --which standing
+      --output-dir results/models
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: model
+    path: results/models/orbital-2.glb
+    title: The second state — a degenerate partner
+    produced_by: >-
+      exp run quantumflow-models --prio 10 --lane cpu --
+      .venv/bin/python scripts/export_orchard_models.py --which standing
+      --output-dir results/models
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: model
+    path: results/models/orbital-3.glb
+    title: The third state — the other degenerate partner
+    produced_by: >-
+      exp run quantumflow-models --prio 10 --lane cpu --
+      .venv/bin/python scripts/export_orchard_models.py --which standing
+      --output-dir results/models
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: model
+    path: results/models/orbital-4.glb
+    title: The fourth state
+    produced_by: >-
+      exp run quantumflow-models --prio 10 --lane cpu --
+      .venv/bin/python scripts/export_orchard_models.py --which standing
+      --output-dir results/models
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: model
+    path: results/models/orbital-5.glb
+    title: The fifth state
+    produced_by: >-
+      exp run quantumflow-models --prio 10 --lane cpu --
+      .venv/bin/python scripts/export_orchard_models.py --which standing
+      --output-dir results/models
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: model
+    path: results/models/density-shells.glb
+    title: The density as containment shells
+    produced_by: >-
+      exp run quantumflow-models --prio 10 --lane cpu --
+      .venv/bin/python scripts/export_orchard_models.py --which standing
+      --output-dir results/models
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: model
+    path: results/models/potential-relief.glb
+    title: The well as a landscape
+    produced_by: >-
+      exp run quantumflow-models --prio 10 --lane cpu --
+      .venv/bin/python scripts/export_orchard_models.py --which standing
+      --output-dir results/models
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: model
+    path: results/models/density-relief.glb
+    title: What settled into the valleys
+    produced_by: >-
+      exp run quantumflow-models --prio 10 --lane cpu --
+      .venv/bin/python scripts/export_orchard_models.py --which standing
+      --output-dir results/models
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: still
+    path: results/stills/equation-orbitary.png
+    title: One well, one wave, one energy
+    produced_by: >-
+      exp run quantumflow-stills --prio 10 --lane cpu --
+      .venv/bin/python scripts/render_equation_stills.py
+      --output-dir results/stills
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: still
+    path: results/stills/equation-shooting-gallery.png
+    title: The wave must land on both walls
+    produced_by: >-
+      exp run quantumflow-stills --prio 10 --lane cpu --
+      .venv/bin/python scripts/render_equation_stills.py
+      --output-dir results/stills
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: still
+    path: results/stills/equation-cloud.png
+    title: Every wave, squared and added, once
+    produced_by: >-
+      exp run quantumflow-stills --prio 10 --lane cpu --
+      .venv/bin/python scripts/render_equation_stills.py
+      --output-dir results/stills
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: still
+    path: results/stills/equation-bowl.png
+    title: The surface never rises above its own chords
+    produced_by: >-
+      exp run quantumflow-stills --prio 10 --lane cpu --
+      .venv/bin/python scripts/render_equation_stills.py
+      --output-dir results/stills
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: still
+    path: results/stills/equation-inversion.png
+    title: "Run it backwards: the cloud gives up the well"
+    produced_by: >-
+      exp run quantumflow-stills --prio 10 --lane cpu --
+      .venv/bin/python scripts/render_equation_stills.py
+      --output-dir results/stills
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: still
+    path: results/stills/equation-flow.png
+    title: Mass follows a slope
+    produced_by: >-
+      exp run quantumflow-stills --prio 10 --lane cpu --
+      .venv/bin/python scripts/render_equation_stills.py
+      --output-dir results/stills
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+  - kind: still
+    path: results/stills/equation-inside.png
+    title: A hole in one wave is not a hole in the sum
+    produced_by: >-
+      exp run quantumflow-stills --prio 10 --lane cpu --
+      .venv/bin/python scripts/render_equation_stills.py
+      --output-dir results/stills
+    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    approved: false
+
+producers:
+  lane: cpu
+  model: >-
+    exp run quantumflow-models --prio 10 --lane cpu --
+    .venv/bin/python scripts/export_orchard_models.py --which all
+    --output-dir results/models
+  tape: >-
+    exp run quantumflow-tape --prio 10 --lane cpu --
+    .venv/bin/python scripts/export_orchard_tape.py
+    --model outputs/transport/pilot/pilot_beta_0_s0_bs256/model.npz
+    --particles 4096 --steps 240 --output-dir results/tape
+  figure: >-
+    exp run quantumflow-figures --prio 10 --lane cpu --
+    .venv/bin/python scripts/render_figures.py --output-dir results/figures
+  env:
+    JAX_PLATFORMS: cpu
+    JAX_ENABLE_X64: "1"
+
+theses:
+  - id: is-the-cloud-enough
+    question: >-
+      If the density really does determine everything, you should be able to
+      run the argument backwards: hand the machine a cloud and get back the
+      potential that shaped it. How close does it come?
+    number: >-
+      Median absolute error of the potential reconstructed from density alone,
+      through mu = dT/dn + v, across the 1,000 held-out Snyder systems, as a
+      percentage of each system's own well depth.
+    picture: >-
+      The true potential and the reconstructed one on the same axes, for the
+      worst of the 1,000 — not the best.
+    phenomena:
+      - hundred-thousand-wells
+      - nodes-cost-energy
+      - convexity-you-can-falsify
+    episode: Is the cloud enough?
+    blocked_by: >-
+      The convex functional has never been trained against the Snyder set and
+      the reconstruction has never been scored. One GPU training run at
+      EXP_PRIO=0 produces the number.
+
+budget:
+  gpu_h: 8
+  cpu_h: 24
+  tts_chars: 0
+  llm_usd: 0
+  disk_gb: 6
+  prio_cap: 10
+
+kill: >-
+  If the trained convex functional cannot reconstruct held-out potentials to
+  better than 10% of well depth in median absolute error, the inversion does
+  not hang as a result. It hangs as a negative one, with that number on the
+  plaque, and the wing's claim narrows to: the cloud is enough in principle,
+  and this is how far short the practice falls.
+
+potential: 0
+
+notes: >-
+  Exhibition tree for the quantumflow wing off the orangery. The four orangery
+  model families and both bowls are built on the CPU from the exact solver and
+  need no training; only the inversion thesis needs the GPU lane. Two caveats
+  travel with the artefacts and must reach the plaques: the flow tape's third
+  coordinate is Phi up to an arbitrary additive gauge, so tapes from
+  independently trained models are not comparable in height, and the shooting
+  tape's scrub axis is trial energy, not time.

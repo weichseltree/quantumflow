@@ -45,7 +45,7 @@ that repository alongside this checkout and install its workspace packages:
 ```bash
 git clone https://github.com/weichseltree/orchard.git
 python -m pip install -e orchard/packages/score -e orchard/packages/tape -e orchard
-python -m pytest -m orchard tests/test_orchard_export.py tests/test_generate_demo_gallery.py
+python -m pytest -m orchard tests/test_orchard_export.py
 ```
 
 The regular test command deliberately excludes these marked tests so supported
@@ -149,44 +149,6 @@ The launcher disables JAX's default whole-device memory preallocation. This
 keeps the experiments within the 8 GiB RTX 3070 budget while ExpDash retains
 exclusive scheduling of the GPU lane.
 
-### Quick gallery demo (no full pilot required)
-
-To exercise the export pipeline and preview sample 2D/3D/WebXR/Orchard
-artifacts without running the 39-run beta pilot, train a tiny model and
-export a demo gallery in one command:
-
-```bash
-python scripts/generate_demo_gallery.py --output-dir outputs/demo_gallery/demo
-```
-
-This trains a small OT-CFM model (a few seconds on CPU, ~300 steps by
-default) to `outputs/demo_gallery/demo/model.npz`, then writes:
-
-- `gallery/tape/` -- a `video/tape/1` trajectory tape plus `webxr_particles.json`
-- `gallery/index.html` -- an offline-capable WebXR viewer (vendored Three.js assets)
-- `gallery/bundles/` -- a verified `orchard/bundle/1` bundle (skip with `--no-bundle`)
-- `gallery/gallery.json` -- a manifest recording provenance and file locations,
-  in the same `quantumflow/gallery/2` schema used by the full pilot's
-  representative gallery
-
-Building the tape, viewer, and bundle requires the optional Orchard stack
-described above; if it isn't installed the command fails with an explicit
-message naming the missing package. Pass `--skip-train` to reuse an existing
-`model.npz` instead of retraining, and `--no-bundle` to skip the bundle step.
-
-Serve the gallery locally to view it in a browser (or a WebXR headset on the
-same network):
-
-```bash
-python -m http.server --directory outputs/demo_gallery/demo/gallery 8000
-```
-
-Then open `http://localhost:8000/` (or the host machine's LAN address from a
-headset). `outputs/` is intentionally gitignored, so demo artifacts are never
-committed. To publish a gallery -- for example via GitHub Pages -- copy the
-contents of `gallery/` into the target branch or a workflow's static-hosting
-artifact directory rather than committing it under `outputs/`.
-
 ### Convex kinetic-energy functional
 
 The active convex-functional implementation is JAX-first:
@@ -229,6 +191,55 @@ python scripts/render_video.py --output-dir outputs/videos --type all --format g
 # Build complete 3D Grove exhibition package (figures, videos, and glowing WebGL volumetric shaders)
 python scripts/export_grove_exhibition.py --output-dir outputs/grove_exhibition
 ```
+
+### The Orchard exhibition
+
+The quantumflow wing of the Mind Palace is built from this repository. Its
+manifest is `orchard.yaml`, which is canonical: the fund's `trees/quantumflow.yaml`
+is a mirror regenerated from it. Install the extra first:
+
+```bash
+python -m pip install -e ".[exhibition]"
+```
+
+Everything the exhibition needs is computed on the CPU from the exact solver;
+only the inversion thesis needs the GPU lane. Pin JAX to the CPU so an export
+never opens a CUDA context outside `gpurun`, where it would contend invisibly
+with whatever holds the lane:
+
+```bash
+# 25 glTF models: signed orbital lobes, density shells, the potential relief,
+# the convexity pair, and the bond-separation walk.
+exp run quantumflow-models --prio 10 --lane cpu -- \
+  .venv/bin/python scripts/export_orchard_models.py --which all --output-dir results/models
+
+# The Shooting Gallery tape. Its scrub axis is trial energy, not time.
+exp run quantumflow-shooting-tape --prio 10 --lane cpu -- \
+  .venv/bin/python scripts/export_shooting_tape.py --output-dir results/tape/shooting
+
+# One equation still per room, plus the wall lines for translation.
+exp run quantumflow-stills --prio 10 --lane cpu -- \
+  .venv/bin/python scripts/render_equation_stills.py --output-dir results/stills
+```
+
+Artefacts land in `results/`, which is ignored: Orchard bundles them from the
+working tree and records their content hashes, so the bundle is the durable
+record. Each exporter writes a manifest naming what the room's plaque must
+state — the metres-per-Hartree of the orbital ladder, the Hartree-per-unit of
+the tape's compressed energy axis, the containment fraction each density shell
+actually encloses. Those constants are not decoration: unstated, a height on a
+wall means nothing.
+
+Two caveats travel with the artefacts and belong on the plaques. The flow
+tape's third coordinate is the learned potential up to an arbitrary additive
+gauge, so tapes from independently trained models cannot be compared by
+height. And the shooting tape is not a movie — each frame is an independent
+trial energy, in increasing order.
+
+`quantumflow.glb` writes binary glTF directly, in core glTF 2.0 with no
+extensions, so the grove never needs a decoder it does not host. Vertex colour
+is the load-bearing feature: every surface carries a measured quantity rather
+than a palette.
 
 ## Clean notebooks
 

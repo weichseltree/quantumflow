@@ -113,3 +113,12 @@ experiments/*/*
 !experiments/**/*.yaml
 !experiments/**/*.txt
 !experiments/**/*.png
+
+# Generated datasets. Rebuilt with `quantumflow-dataset`; 1.8 GB of solved
+# systems does not belong in the history.
+datasets/
+
+# Exhibition artefacts: glbs, tapes and stills built by the export scripts.
+# Orchard bundles these from the working tree and records their content
+# hashes, so the bundle is the durable record, not a git blob.
+results/

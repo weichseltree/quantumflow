@@ -30,6 +30,11 @@ dev = [
 legacy-tensorflow = [
     "tensorflow>=2.16",
 ]
+exhibition = [
+    # Marching cubes, for the isosurfaces the exhibition models are built from.
+    # The glTF writer is `quantumflow.glb` and has no dependency of its own.
+    "scikit-image>=0.24",
+]
 
 [project.scripts]
 quantumflow-dataset = "quantumflow.cli:dataset_main"

@@ -86,6 +86,16 @@ def main() -> None:
     parser.add_argument("--trials", type=int, default=420, help="frames, one per trial energy")
     parser.add_argument("--levels", type=int, default=2, help="how many eigenvalues to sweep past")
     parser.add_argument("--output-dir", type=Path, default=Path("results/tape/shooting"))
+    parser.add_argument(
+        "--hang-metres",
+        type=float,
+        default=34.0,
+        help=(
+            "the length the grove hangs the tape at, along its longest side. Only used "
+            "to derive the Hartree-per-metre the plaque quotes; re-run with the real "
+            "figure if the hang is retuned, rather than letting the meta drift."
+        ),
+    )
     args = parser.parse_args()
 
     with h5py.File(args.dataset, "r") as handle:
@@ -99,9 +109,7 @@ def main() -> None:
     energy_min = float(potential.min()) - 1.0
     # Stop a little past the last eigenvalue the sweep is meant to find, so the
     # visitor sees the wave fail again on the far side of it.
-    energy_max = float(reference[levels - 1]) + 0.35 * float(
-        reference[levels - 1] - reference[0]
-    )
+    energy_max = float(reference[levels - 1]) + 0.35 * float(reference[levels - 1] - reference[0])
     print(f"system {args.system}: well from {potential.min():.3f} to {potential.max():.3f} Ha")
     print(f"sweeping {args.trials} trial energies over [{energy_min:.3f}, {energy_max:.3f}] Ha")
 
@@ -162,6 +170,12 @@ def main() -> None:
     extent = span + 2.0 * padding
     origin = lower - padding
 
+    # Derived from the hang rather than written down twice: the grove scales a
+    # tape so its longest side measures the hung length, and the vertical
+    # constant a visitor reads follows from that one number.
+    metres_per_unit = args.hang_metres / float(extent[0])
+    hartree_per_metre = (1.0 / ENERGY_UNITS_PER_HARTREE) / metres_per_unit
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
     meta = {
         "title": "The Shooting Gallery: quantization found by hand",
@@ -199,6 +213,13 @@ def main() -> None:
                 "is a display choice, the height of the line it rides on is the energy"
             ),
             "length_units_per_box": LENGTH_UNITS,
+            "hung_at_metres": args.hang_metres,
+            "metres_per_tape_unit": metres_per_unit,
+            "hartree_per_metre": hartree_per_metre,
+            "plaque_constant": (
+                f"{hartree_per_metre:.3f} Hartree per metre of height, with the tape hung "
+                f"{args.hang_metres:.1f} m along its length"
+            ),
         },
         "physics": {
             "equation": "psi'' = 2 (v - E) psi, integrated by Numerov, psi(0) = 0",
@@ -252,6 +273,10 @@ def main() -> None:
     aspect = extent[1] / extent[0]
     print(f"\nbox {[round(float(v), 2) for v in extent]}  (height/length = {aspect:.3f})")
     print(f"vertical axis: 1 unit = {1.0 / ENERGY_UNITS_PER_HARTREE:.1f} Hartree")
+    print(
+        f"hung at {args.hang_metres:.1f} m: {metres_per_unit:.4f} m/unit, "
+        f"{hartree_per_metre:.3f} Hartree per metre"
+    )
     print(f"{args.trials} frames x {total:,} particles -> {args.output_dir}")
 
 

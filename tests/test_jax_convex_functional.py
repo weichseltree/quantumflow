@@ -47,3 +47,25 @@ def test_training_step_reduces_linear_target_loss() -> None:
     _, _, loss = step(params, optimizer_state, density, targets)
 
     assert jnp.isfinite(loss)
+
+
+def test_parameters_round_trip_through_an_archive(tmp_path):
+    """The trained functional has to come back byte-identical to build the room."""
+    import numpy as np
+
+    from quantumflow.jax.convex import load_parameters, save_parameters
+
+    params = init_icnn(jax.random.key(3), input_size=12, hidden_units=(8, 8))
+    path = tmp_path / "icnn.npz"
+    save_parameters(params, path)
+    restored = load_parameters(path)
+
+    assert set(restored) == set(params)
+    for name, (weight, bias) in params.items():
+        np.testing.assert_allclose(restored[name][0], weight, atol=0)
+        np.testing.assert_allclose(restored[name][1], bias, atol=0)
+
+    density = jnp.asarray(np.linspace(0.1, 1.0, 12))
+    np.testing.assert_allclose(
+        kinetic_energy(restored, density), kinetic_energy(params, density), atol=0
+    )

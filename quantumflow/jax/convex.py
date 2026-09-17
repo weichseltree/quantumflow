@@ -38,6 +38,36 @@ def init_icnn(key: Array, input_size: int, hidden_units: Sequence[int] = (128, 1
     return params
 
 
+def save_parameters(params: Parameters, path) -> None:
+    """Save an ICNN parameter tree as a portable, non-executable archive.
+
+    Each layer is stored as two arrays under its own name, so the file carries
+    no pickled objects and can be read by anything that reads ``.npz``.
+    """
+    import numpy as np
+
+    arrays = {}
+    for name, (weight, bias) in params.items():
+        arrays[f"{name}__weight"] = np.asarray(weight)
+        arrays[f"{name}__bias"] = np.asarray(bias)
+    np.savez_compressed(path, **arrays)
+
+
+def load_parameters(path) -> Parameters:
+    """Load a parameter tree written by :func:`save_parameters`."""
+    import numpy as np
+
+    params: Parameters = {}
+    with np.load(path, allow_pickle=False) as archive:
+        names = {key.rsplit("__", 1)[0] for key in archive.files}
+        for name in names:
+            params[name] = (
+                jnp.asarray(archive[f"{name}__weight"]),
+                jnp.asarray(archive[f"{name}__bias"]),
+            )
+    return params
+
+
 def _positive(value: Array) -> Array:
     return jax.nn.softplus(value)
 

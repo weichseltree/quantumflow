@@ -67,28 +67,28 @@ artefacts:
     path: outputs/transport/pilot/gallery/tape/header.json
     title: OT-CFM particle flow, the retained baseline
     produced_by: python scripts/finalize_beta_pilot.py
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
 
   - kind: still
     path: outputs/transport/pilot/gallery/bundles/61d3664347750753/poster.png
     title: Flow poster
     produced_by: python scripts/finalize_beta_pilot.py
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
 
   - kind: tape
     path: outputs/transport/pbt/gallery/tape/header.json
     title: PBT champion flow
     produced_by: python scripts/run_pbt.py
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
 
   - kind: still
     path: outputs/transport/pbt/gallery/bundles/dcef6c52ac12f9a2/poster.png
     title: PBT champion poster
     produced_by: python scripts/run_pbt.py
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
 
   - kind: tape
@@ -98,7 +98,7 @@ artefacts:
       exp run quantumflow-shooting-tape --prio 10 --lane cpu --
       .venv/bin/python scripts/export_shooting_tape.py
       --output-dir results/tape/shooting
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
 
   - kind: model
@@ -108,7 +108,7 @@ artefacts:
       exp run quantumflow-models-bowls --prio 10 --lane cpu --
       .venv/bin/python scripts/export_orchard_models.py --which bowls
       --output-dir results/models
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
 
   - kind: model
@@ -118,7 +118,7 @@ artefacts:
       exp run quantumflow-models-bowls --prio 10 --lane cpu --
       .venv/bin/python scripts/export_orchard_models.py --which bowls
       --output-dir results/models
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
 
   - kind: model
@@ -128,7 +128,7 @@ artefacts:
       exp run quantumflow-models --prio 10 --lane cpu --
       .venv/bin/python scripts/export_orchard_models.py --which standing
       --output-dir results/models
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: model
     path: results/models/orbital-1.glb
@@ -137,7 +137,7 @@ artefacts:
       exp run quantumflow-models --prio 10 --lane cpu --
       .venv/bin/python scripts/export_orchard_models.py --which standing
       --output-dir results/models
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: model
     path: results/models/orbital-2.glb
@@ -146,7 +146,7 @@ artefacts:
       exp run quantumflow-models --prio 10 --lane cpu --
       .venv/bin/python scripts/export_orchard_models.py --which standing
       --output-dir results/models
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: model
     path: results/models/orbital-3.glb
@@ -155,7 +155,7 @@ artefacts:
       exp run quantumflow-models --prio 10 --lane cpu --
       .venv/bin/python scripts/export_orchard_models.py --which standing
       --output-dir results/models
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: model
     path: results/models/orbital-4.glb
@@ -164,7 +164,7 @@ artefacts:
       exp run quantumflow-models --prio 10 --lane cpu --
       .venv/bin/python scripts/export_orchard_models.py --which standing
       --output-dir results/models
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: model
     path: results/models/orbital-5.glb
@@ -173,7 +173,7 @@ artefacts:
       exp run quantumflow-models --prio 10 --lane cpu --
       .venv/bin/python scripts/export_orchard_models.py --which standing
       --output-dir results/models
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: model
     path: results/models/density-shells.glb
@@ -182,7 +182,7 @@ artefacts:
       exp run quantumflow-models --prio 10 --lane cpu --
       .venv/bin/python scripts/export_orchard_models.py --which standing
       --output-dir results/models
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: model
     path: results/models/potential-relief.glb
@@ -191,7 +191,7 @@ artefacts:
       exp run quantumflow-models --prio 10 --lane cpu --
       .venv/bin/python scripts/export_orchard_models.py --which standing
       --output-dir results/models
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: model
     path: results/models/density-relief.glb
@@ -200,7 +200,7 @@ artefacts:
       exp run quantumflow-models --prio 10 --lane cpu --
       .venv/bin/python scripts/export_orchard_models.py --which standing
       --output-dir results/models
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: still
     path: results/stills/equation-orbitary.png
@@ -209,7 +209,7 @@ artefacts:
       exp run quantumflow-stills --prio 10 --lane cpu --
       .venv/bin/python scripts/render_equation_stills.py
       --output-dir results/stills
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: still
     path: results/stills/equation-shooting-gallery.png
@@ -218,7 +218,7 @@ artefacts:
       exp run quantumflow-stills --prio 10 --lane cpu --
       .venv/bin/python scripts/render_equation_stills.py
       --output-dir results/stills
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: still
     path: results/stills/equation-cloud.png
@@ -227,7 +227,7 @@ artefacts:
       exp run quantumflow-stills --prio 10 --lane cpu --
       .venv/bin/python scripts/render_equation_stills.py
       --output-dir results/stills
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: still
     path: results/stills/equation-bowl.png
@@ -236,7 +236,7 @@ artefacts:
       exp run quantumflow-stills --prio 10 --lane cpu --
       .venv/bin/python scripts/render_equation_stills.py
       --output-dir results/stills
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: still
     path: results/stills/equation-inversion.png
@@ -245,7 +245,7 @@ artefacts:
       exp run quantumflow-stills --prio 10 --lane cpu --
       .venv/bin/python scripts/render_equation_stills.py
       --output-dir results/stills
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: still
     path: results/stills/equation-flow.png
@@ -254,7 +254,7 @@ artefacts:
       exp run quantumflow-stills --prio 10 --lane cpu --
       .venv/bin/python scripts/render_equation_stills.py
       --output-dir results/stills
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
   - kind: still
     path: results/stills/equation-inside.png
@@ -263,7 +263,7 @@ artefacts:
       exp run quantumflow-stills --prio 10 --lane cpu --
       .venv/bin/python scripts/render_equation_stills.py
       --output-dir results/stills
-    commit: e7bdfb2b7ef06729051ddc84dc705bbbc2fc938b
+    commit: ae2f93c3070fd136a5c29fdda9b4bd4b9352534e
     approved: false
 
 producers:

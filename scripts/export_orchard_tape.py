@@ -61,6 +61,11 @@ def main() -> None:
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-dir", type=Path, default=Path("results/tape/flow"))
+    parser.add_argument(
+        "--webxr-sidecar",
+        action="store_true",
+        help="also write webxr_particles.json for the standalone offline viewer",
+    )
     args = parser.parse_args()
 
     if not args.model.exists():
@@ -89,6 +94,9 @@ def main() -> None:
                 "independently trained flows incomparable by height"
             ),
         },
+        # The grove reads the tape, not the standalone viewer's JSON copy
+        # of every frame, which is 100 MB at this scale.
+        write_webxr_sidecar=args.webxr_sidecar,
         source_run=args.model.parent.name,
         source_model=str(args.model),
         git_sha=git_sha(),

@@ -62,6 +62,7 @@ def export_trajectory_tape(
     source_run: str | None = None,
     source_model: str | None = None,
     git_sha: str | None = None,
+    write_webxr_sidecar: bool = True,
 ) -> Path:
     """Write a ``video/tape/1`` trajectory and its browser-viewer sidecar.
 
@@ -214,10 +215,16 @@ def export_trajectory_tape(
             for index in range(num_steps + 1)
         ],
     }
-    (output_tape_dir / "webxr_particles.json").write_text(
-        json.dumps(payload, allow_nan=False, separators=(",", ":")),
-        encoding="utf-8",
-    )
+    if write_webxr_sidecar:
+        # Every frame again as JSON, for the standalone offline viewer. The
+        # grove reads the `video/tape/1` files and never this, and at hall
+        # scale it is 100 MB against the tape's 23 -- so a producer writing
+        # only for the grove turns it off rather than spending the disk budget
+        # on a file nothing opens.
+        (output_tape_dir / "webxr_particles.json").write_text(
+            json.dumps(payload, allow_nan=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
     return output_tape_dir
 
 

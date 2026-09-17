@@ -75,9 +75,7 @@ def build_walk(output_dir: Path, points: int, refine: int) -> list[dict]:
     stations = []
 
     for separation in WALK_SEPARATIONS:
-        solution = solve_showcase_system(
-            points=points, separation=separation, num_orbitals=2
-        )
+        solution = solve_showcase_system(points=points, separation=separation, num_orbitals=2)
         stations.append((separation, solution))
         print(
             f"  d = {separation:.1f} bohr  "
@@ -125,9 +123,18 @@ def build_standing(output_dir: Path, points: int, refine: int) -> list[dict]:
     entries: list[dict] = []
 
     print(f"orbitals + density: one solve at {points} points per axis")
-    solution = solve_showcase_system(points=points, separation=1.6, num_orbitals=6)
+    # `close_shell` because the density shells are summed over the occupied
+    # set: ending the sum inside a degenerate multiplet would make the cloud's
+    # shape depend on a rotation the solver picked, and that cloud is the
+    # centrepiece of The Cloud.
+    solution = solve_showcase_system(
+        points=points, separation=1.6, num_orbitals=6, close_shell=True
+    )
     energies = solution["orbital_energies"]
+    print(f"  occupied {solution['occupied']} of 6 requested (closed shell)")
     print("  energies (Ha):", np.round(energies, 4))
+    if solution["degenerate_cut"]:
+        raise SystemExit("refusing to export: the occupied set splits a degenerate multiplet")
     span = float(energies.max() - energies.min())
     metres_per_hartree = (LADDER_HIGH - LADDER_LOW) / span if span > 0 else 0.0
 

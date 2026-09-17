@@ -167,6 +167,21 @@ class TestSparseSolver:
         )
         np.testing.assert_allclose(dense["density"], sparse["density"], atol=1e-9)
 
+    def test_closing_the_shell_steps_the_occupation_down(self) -> None:
+        # Six requested, but the sixth is degenerate with a seventh that is
+        # left out; the closed occupation stops at the last real gap.
+        opened = solve_showcase_system(points=20, separation=1.6, num_orbitals=6)
+        closed = solve_showcase_system(points=20, separation=1.6, num_orbitals=6, close_shell=True)
+        assert opened["degenerate_cut"] is True
+        assert closed["degenerate_cut"] is False
+        assert closed["occupied"] < opened["occupied"]
+        # The density must be the sum over exactly the states it reports.
+        np.testing.assert_allclose(
+            closed["density"],
+            np.sum(closed["wavefunctions"] ** 2, axis=1),
+            atol=1e-12,
+        )
+
     def test_a_split_degenerate_shell_is_flagged(self) -> None:
         # The p-like triplet of a symmetric well: occupying two of three is
         # exactly the mistake the flag exists to catch.

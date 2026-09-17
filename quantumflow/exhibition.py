@@ -672,6 +672,7 @@ def solve_showcase_system(
     num_orbitals: int = 6,
     extent: float = 3.2,
     degeneracy_tolerance: float = 1e-6,
+    close_shell: bool = False,
 ) -> dict:
     """Solve a two-well system: the exhibition's standing example.
 
@@ -686,6 +687,12 @@ def solve_showcase_system(
     of a degenerate set depends on a basis the solver chose arbitrarily -- two
     solvers give two different clouds for the same physics. Occupy the whole
     multiplet or none of it; the flag says when ``num_orbitals`` splits one.
+
+    Pass ``close_shell`` to step the occupation down to the largest count at
+    or below ``num_orbitals`` that ends on a real energy gap. Any exhibit
+    built from the total density -- the shells, the cloud a visitor walks into
+    -- should set it, because a cloud whose shape depends on an arbitrary
+    rotation is not a thing to hang on a wall and label.
     """
     grid = Grid.create(dimension=dimension, lower=-extent, upper=extent, points=points)
     coords = grid.coordinates
@@ -705,9 +712,19 @@ def solve_showcase_system(
         potential=potential, grid=grid, num_orbitals=num_orbitals + 1
     )
     energies = np.asarray(solution["orbital_energies"])
+    if close_shell:
+        # Step down until the occupation ends on a gap rather than inside a
+        # multiplet. Walking down, not up: adding states would occupy orbitals
+        # the system was not asked for.
+        while num_orbitals > 1 and (
+            abs(energies[num_orbitals] - energies[num_orbitals - 1]) < degeneracy_tolerance
+        ):
+            num_orbitals -= 1
+
     solution["degenerate_cut"] = bool(
         abs(energies[num_orbitals] - energies[num_orbitals - 1]) < degeneracy_tolerance
     )
+    solution["occupied"] = int(num_orbitals)
     solution["orbital_energies"] = energies[:num_orbitals]
     solution["wavefunctions"] = solution["wavefunctions"][:, :num_orbitals]
     solution["density"] = np.sum(solution["wavefunctions"] ** 2, axis=1)

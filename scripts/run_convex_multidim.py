@@ -42,6 +42,8 @@ def run_experiment(
     lr: float = 2e-3,
     alpha_derivative: float = 1.0,
     seed: int = 42,
+    potential_type: str = "gaussian",
+    potential_kwargs: dict[str, Any] | None = None,
     output_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Train and evaluate convex functional for multi-dimensional orbital energy mapping."""
@@ -50,7 +52,9 @@ def run_experiment(
     if num_steps < 1 or train_size < 1 or test_size < 1:
         raise ValueError("num_steps, train_size, and test_size must be positive")
 
+    p_kwargs = potential_kwargs or {}
     print(f"=== Starting {dimension}D Convex Potential-to-Orbital Energy Mapping Experiment ===")
+    print(f"Potential Type: {potential_type} {p_kwargs if p_kwargs else ''}")
     print(
         f"Dimension: {dimension}D | Grid: {grid_points}^{dimension} = "
         f"{grid_points**dimension} pts | Orbitals: {num_orbitals}"
@@ -75,6 +79,8 @@ def run_experiment(
         dataset_size=train_size,
         num_orbitals=num_orbitals,
         seed=seed,
+        potential_type=potential_type,
+        **p_kwargs,
     )
     print("Generating test dataset...")
     test_data = generate_multidim_dataset(
@@ -82,6 +88,8 @@ def run_experiment(
         dataset_size=test_size,
         num_orbitals=num_orbitals,
         seed=seed + 9999,
+        potential_type=potential_type,
+        **p_kwargs,
     )
     data_seconds = time.time() - data_start
     print(f"Datasets generated in {data_seconds:.2f}s.")
@@ -234,6 +242,8 @@ def run_experiment(
 
     metrics = {
         "dimension": dimension,
+        "potential_type": potential_type,
+        "potential_kwargs": p_kwargs,
         "grid_points_per_dim": grid_points,
         "total_grid_points": grid.total_points,
         "num_orbitals": num_orbitals,
@@ -256,8 +266,21 @@ def run_experiment(
         "total_seconds": total_seconds,
     }
 
+    expdash.report(
+        step=num_steps,
+        total=num_steps,
+        loss=loss_val,
+        loss_energy=loss_e,
+        loss_derivative=loss_d,
+        kinetic_energy_mae=t_mae,
+        potential_mae=v_mae,
+        chemical_potential_mae=mu_mae,
+        mean_orbital_energy_mae=mean_orbital_mae,
+        variational_density_mae=float(np.mean(var_density_errors)),
+    )
+
     print("\n" + "=" * 60)
-    print(f"=== {dimension}D EXPERIMENT RESULTS SUMMARY ===")
+    print(f"=== {dimension}D EXPERIMENT RESULTS SUMMARY ({potential_type}) ===")
     print(f"Kinetic Energy MAE:           {t_mae:.5f} Hartree")
     print(f"Potential Reconstruction MAE: {v_mae:.5f} Hartree")
     print(f"Chemical Potential (HOMO) MAE: {mu_mae:.5f} Hartree")
@@ -271,9 +294,10 @@ def run_experiment(
     if output_dir:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
-        with open(output_path / f"metrics_{dimension}d.json", "w", encoding="utf-8") as f:
+        filename = f"metrics_{dimension}d_{potential_type}.json"
+        with open(output_path / filename, "w", encoding="utf-8") as f:
             json.dump(metrics, f, indent=2)
-        print(f"Saved results to {output_path / f'metrics_{dimension}d.json'}")
+        print(f"Saved results to {output_path / filename}")
 
     return metrics
 
@@ -284,6 +308,19 @@ def main() -> None:
     )
     parser.add_argument(
         "--dimension", type=int, default=2, choices=[1, 2, 3], help="Spatial dimension (1, 2, or 3)"
+    )
+    parser.add_argument(
+        "--potential-type",
+        type=str,
+        default="gaussian",
+        choices=["gaussian", "piecewise_constant", "piecewise_linear"],
+        help="Type of potential to generate ('gaussian', 'piecewise_constant', or 'piecewise_linear')",
+    )
+    parser.add_argument(
+        "--potential-shape",
+        type=str,
+        default=None,
+        help="Shape/mode for piecewise potentials ('box', 'sphere', 'staircase' for constant; 'convex_polyhedral', 'l1_pyramid' for linear)",
     )
     parser.add_argument("--grid-points", type=int, default=24, help="Grid points per dimension")
     parser.add_argument("--orbitals", type=int, default=3, help="Number of occupied orbitals")
@@ -299,6 +336,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    potential_kwargs: dict[str, Any] = {}
+    if args.potential_shape:
+        if args.potential_type == "piecewise_constant":
+            potential_kwargs["shape"] = args.potential_shape
+        elif args.potential_type == "piecewise_linear":
+            potential_kwargs["mode"] = args.potential_shape
+
     run_experiment(
         dimension=args.dimension,
         grid_points=args.grid_points,
@@ -310,6 +354,8 @@ def main() -> None:
         lr=args.lr,
         alpha_derivative=args.alpha,
         seed=args.seed,
+        potential_type=args.potential_type,
+        potential_kwargs=potential_kwargs,
         output_dir=args.output_dir,
     )
 

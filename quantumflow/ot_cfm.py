@@ -216,23 +216,108 @@ def compute_mode_metrics(
     }
 
 
+def sample_cube_gaussians_3d(
+    key: jax.Array,
+    batch_size: int,
+    scale: float = 1.5,
+    std: float = 0.1,
+) -> jax.Array:
+    """Sample from an 8-Gaussian mixture on the 8 vertices of a 3D cube."""
+    key_comp, key_noise = jax.random.split(key)
+    vertices = (
+        jnp.array(
+            [
+                [-1.0, -1.0, -1.0],
+                [-1.0, -1.0, 1.0],
+                [-1.0, 1.0, -1.0],
+                [-1.0, 1.0, 1.0],
+                [1.0, -1.0, -1.0],
+                [1.0, -1.0, 1.0],
+                [1.0, 1.0, -1.0],
+                [1.0, 1.0, 1.0],
+            ],
+            dtype=jnp.float32,
+        )
+        * scale
+    )
+
+    components = jax.random.choice(key_comp, 8, shape=(batch_size,))
+    chosen_centers = vertices[components]
+    noise = jax.random.normal(key_noise, shape=(batch_size, 3)) * std
+    return chosen_centers + noise
+
+
+def compute_mode_metrics_3d(
+    samples: jax.Array | np.ndarray,
+    scale: float = 1.5,
+    threshold: float = 0.6,
+) -> dict[str, float | int | list[int]]:
+    """Compute mode coverage and statistics for 8-Gaussian 3D cube target."""
+    samples_np = np.asarray(samples)
+    vertices = (
+        np.array(
+            [
+                [-1.0, -1.0, -1.0],
+                [-1.0, -1.0, 1.0],
+                [-1.0, 1.0, -1.0],
+                [-1.0, 1.0, 1.0],
+                [1.0, -1.0, -1.0],
+                [1.0, -1.0, 1.0],
+                [1.0, 1.0, -1.0],
+                [1.0, 1.0, 1.0],
+            ],
+            dtype=float,
+        )
+        * scale
+    )
+
+    dists = cdist(samples_np, vertices)
+    closest_mode = np.argmin(dists, axis=1)
+    min_dist = np.min(dists, axis=1)
+
+    valid_mask = min_dist <= threshold
+    valid_modes = closest_mode[valid_mask]
+
+    counts = np.bincount(valid_modes, minlength=8).tolist()
+    total_assigned = int(sum(counts))
+    modes_covered = int(sum(1 for c in counts if c > 0))
+    missing_modes = int(8 - modes_covered)
+
+    if total_assigned > 0:
+        probs = np.array(counts, dtype=float) / total_assigned
+        non_zero_p = probs[probs > 0]
+        entropy = -float(np.sum(non_zero_p * np.log2(non_zero_p)))
+        norm_entropy = float(entropy / 3.0)  # log2(8) = 3.0
+    else:
+        norm_entropy = 0.0
+
+    return {
+        "modes_covered": modes_covered,
+        "missing_modes": missing_modes,
+        "mode_counts": counts,
+        "mode_entropy": norm_entropy,
+        "unassigned_samples": int(len(samples_np) - total_assigned),
+    }
+
+
 def compute_eigenvalue_spread(
     params: ModelParams,
     points: jax.Array,
     t: float,
 ) -> dict[str, jax.Array]:
-    """Compute eigenvalue spread |lambda_1 - lambda_2| / (|lambda_1| + |lambda_2| + eps).
+    """Compute eigenvalue spread max|lambda_i - lambda_j| / (sum |lambda_k| + eps).
 
     Returns a dict with 'mean' and 'max' spread.
     """
+
     def point_hessian(p):
         return jax.hessian(lambda p_: evaluate_potential(params, jnp.array(t), p_))(p)
 
-    hessians = jax.vmap(point_hessian)(points)  # (N, 2, 2)
-    eigvals = jax.vmap(jnp.linalg.eigvalsh)(hessians)  # (N, 2)
-    l1 = eigvals[:, 0]
-    l2 = eigvals[:, 1]
-    spread = jnp.abs(l1 - l2) / (jnp.abs(l1) + jnp.abs(l2) + 1e-6)
+    hessians = jax.vmap(point_hessian)(points)  # (N, d, d)
+    eigvals = jax.vmap(jnp.linalg.eigvalsh)(hessians)  # (N, d)
+    spread_max = jnp.max(eigvals, axis=-1) - jnp.min(eigvals, axis=-1)
+    denom = jnp.sum(jnp.abs(eigvals), axis=-1) + 1e-6
+    spread = spread_max / denom
     return {
         "mean": jnp.mean(spread),
         "max": jnp.max(spread),
@@ -245,9 +330,16 @@ def sliced_wasserstein_distance(
     key: jax.Array,
     num_projections: int = 128,
 ) -> jax.Array:
-    """Compute Sliced 2-Wasserstein distance between empirical distributions in 2D."""
-    theta = jax.random.uniform(key, (num_projections,), minval=0.0, maxval=2.0 * jnp.pi)
-    projections = jnp.stack([jnp.cos(theta), jnp.sin(theta)], axis=1)  # (P, 2)
+    """Compute Sliced 2-Wasserstein distance between empirical distributions in d-dimensions.
+    """
+    dim = x.shape[-1]
+    if dim == 2:
+        theta = jax.random.uniform(key, (num_projections,), minval=0.0, maxval=2.0 * jnp.pi)
+        projections = jnp.stack([jnp.cos(theta), jnp.sin(theta)], axis=1)  # (P, 2)
+    else:
+        raw_projections = jax.random.normal(key, shape=(num_projections, dim))
+        norms = jnp.linalg.norm(raw_projections, axis=-1, keepdims=True)
+        projections = raw_projections / jnp.maximum(norms, 1e-12)
 
     proj_x = x @ projections.T  # (N, P)
     proj_y = y @ projections.T  # (M, P)

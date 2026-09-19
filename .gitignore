@@ -104,8 +104,10 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-# PyCharm
+# PyCharm & VS Code
 .idea
+.vscode/
+*.code-workspace
 
 # Local experiment artifacts
 outputs/

@@ -277,3 +277,178 @@ def solve_ground_state_density(
         "potential_energy": float(pot_energy),
         "total_energy": float(tot_energy),
     }
+
+
+def von_weizsaecker_kinetic_energy(
+    density: Array,
+    spacing: float = 1.0,
+    eps: float = 1e-12,
+) -> Array:
+    """Evaluate the von Weizsaecker kinetic energy functional:
+
+    T_W[n] = 1/2 int |grad sqrt(n)|^2 dx
+
+    For 1D discretized densities shaped ``(..., grid_points)``.
+    Uses central differences on the interior and one-sided differences at boundaries.
+    """
+    density = jnp.asarray(density)
+    sqrt_n = jnp.sqrt(jnp.maximum(density, 0.0) + eps)
+
+    if density.ndim == 1:
+        d_sqrt_n_interior = (sqrt_n[2:] - sqrt_n[:-2]) / (2.0 * spacing)
+        d_sqrt_n_left = (sqrt_n[1] - sqrt_n[0]) / spacing
+        d_sqrt_n_right = (sqrt_n[-1] - sqrt_n[-2]) / spacing
+        grad_sqrt_n = jnp.concatenate(
+            [d_sqrt_n_left[None], d_sqrt_n_interior, d_sqrt_n_right[None]]
+        )
+        return 0.5 * jnp.sum(jnp.square(grad_sqrt_n)) * spacing
+    else:
+        d_sqrt_n_interior = (sqrt_n[:, 2:] - sqrt_n[:, :-2]) / (2.0 * spacing)
+        d_sqrt_n_left = (sqrt_n[:, 1:2] - sqrt_n[:, 0:1]) / spacing
+        d_sqrt_n_right = (sqrt_n[:, -1:] - sqrt_n[:, -2:-1]) / spacing
+        grad_sqrt_n = jnp.concatenate([d_sqrt_n_left, d_sqrt_n_interior, d_sqrt_n_right], axis=-1)
+        return 0.5 * jnp.sum(jnp.square(grad_sqrt_n), axis=-1) * spacing
+
+
+def quantum_potential(
+    density: Array,
+    spacing: float = 1.0,
+    eps: float = 1e-12,
+) -> Array:
+    """Evaluate the Bohmian quantum potential Q[n] = delta T_W[n] / delta n.
+
+    Q[n](x) = -1/2 (grad^2 sqrt(n)) / sqrt(n)
+
+    This dispersive potential acts as an internal pressure barrier that
+    counteracts steep gradient steepening and prevents Navier-Stokes / Euler
+    shock wave formation and finite-time blow-ups.
+    """
+    density = jnp.asarray(density)
+    scale = 1.0 / spacing
+    if density.ndim == 1:
+        return scale * jax.grad(
+            lambda n: von_weizsaecker_kinetic_energy(n, spacing=spacing, eps=eps)
+        )(density)
+    return scale * jax.vmap(
+        jax.grad(lambda n: von_weizsaecker_kinetic_energy(n, spacing=spacing, eps=eps))
+    )(density)
+
+
+def regularized_kinetic_energy(
+    params: Parameters,
+    density: Array,
+    spacing: float = 1.0,
+    c_w: float = 1.0,
+) -> Array:
+    """Evaluate regularized kinetic functional: T_s[n] = c_W * T_W[n] + T_corr[n].
+
+    Guarantees the rigorous von Weizsaecker lower bound T_s[n] >= T_W[n] (when c_W=1.0)
+    and enforces H^1 Sobolev regularity on the density field.
+    """
+    t_w = von_weizsaecker_kinetic_energy(density, spacing=spacing)
+    t_corr = kinetic_energy(params, density)
+    return c_w * t_w + t_corr
+
+
+def spin_resolved_kinetic_energy(
+    params: Parameters,
+    density_up: Array,
+    density_down: Array,
+    spacing: float = 1.0,
+    c_w: float = 1.0,
+) -> Array:
+    """Evaluate spin-resolved kinetic functional via the Oliver-Perdew relation:
+
+    T_s[n_up, n_down] = 1/2 T_s[2 n_up] + 1/2 T_s[2 n_down]
+    """
+    t_up = regularized_kinetic_energy(params, 2.0 * density_up, spacing=spacing, c_w=c_w)
+    t_down = regularized_kinetic_energy(params, 2.0 * density_down, spacing=spacing, c_w=c_w)
+    return 0.5 * (t_up + t_down)
+
+
+def multispecies_kinetic_energy(
+    params_or_dict: Parameters | dict[str, Parameters],
+    densities: Sequence[Array],
+    masses: Sequence[float],
+    spacing: float = 1.0,
+    c_w: float = 1.0,
+) -> Array:
+    """Evaluate multi-species mass-weighted kinetic functional:
+
+    T_s[{n_alpha}] = sum_alpha (1 / (2 * m_alpha)) * T_s[n_alpha]
+    """
+    total = 0.0
+    for idx, (n_alpha, m_alpha) in enumerate(zip(densities, masses, strict=True)):
+        if isinstance(params_or_dict, dict) and f"species_{idx}" in params_or_dict:
+            p = params_or_dict[f"species_{idx}"]
+        else:
+            p = params_or_dict
+        t_alpha = regularized_kinetic_energy(p, n_alpha, spacing=spacing, c_w=c_w)
+        total = total + (1.0 / (2.0 * m_alpha)) * t_alpha
+    return total
+
+
+def solve_ground_state_density_stabilized(
+    params: Parameters,
+    potential: Array,
+    num_particles: float,
+    volume_element: float = 1.0,
+    c_w: float = 1.0,
+    num_steps: int = 300,
+    lr: float = 5e-2,
+) -> dict[str, Array | float]:
+    """Variational ground-state search with quantum pressure (T_W) stabilization.
+
+    Minimizes E[n] = c_W * T_W[n] + T_corr[n] + int v(r) n(r) dr with Softplus
+    normalization. The dispersive quantum potential prevents charge-sloshing
+    and finite-time singular spikes.
+    """
+    v_arr = jnp.asarray(potential, dtype=jnp.float32).reshape(-1)
+    grid_size = v_arr.shape[0]
+
+    init_logits = jnp.zeros((grid_size,), dtype=jnp.float32)
+    optimizer = optax.adam(learning_rate=lr)
+    opt_state = optimizer.init(init_logits)
+
+    def logits_to_density(logits: Array) -> Array:
+        sp = jax.nn.softplus(logits)
+        normalized = sp / (jnp.sum(sp) * volume_element)
+        return normalized * num_particles
+
+    def variational_energy(logits: Array) -> Array:
+        n = logits_to_density(logits)
+        t_s = regularized_kinetic_energy(params, n, spacing=volume_element, c_w=c_w)
+        v_ext = jnp.sum(v_arr * n) * volume_element
+        return t_s + v_ext
+
+    @jax.jit
+    def opt_step(logits: Array, state: optax.OptState) -> tuple[Array, optax.OptState]:
+        grads = jax.grad(variational_energy)(logits)
+        updates, new_state = optimizer.update(grads, state, logits)
+        return optax.apply_updates(logits, updates), new_state
+
+    current_logits = init_logits
+    for _ in range(num_steps):
+        current_logits, opt_state = opt_step(current_logits, opt_state)
+
+    optimal_density = logits_to_density(current_logits)
+    kin_energy = regularized_kinetic_energy(
+        params, optimal_density, spacing=volume_element, c_w=c_w
+    )
+    tot_energy = variational_energy(current_logits)
+    pot_energy = tot_energy - kin_energy
+
+    # Recover chemical potential from regularized Euler equation: mu = delta T / delta n + v(r)
+    scale = 1.0 / volume_element
+    deriv = scale * jax.grad(
+        lambda n: regularized_kinetic_energy(params, n, spacing=volume_element, c_w=c_w)
+    )(optimal_density)
+    chemical_potential = jnp.mean(deriv + v_arr)
+
+    return {
+        "density": optimal_density,
+        "chemical_potential": float(chemical_potential),
+        "kinetic_energy": float(kin_energy),
+        "potential_energy": float(pot_energy),
+        "total_energy": float(tot_energy),
+    }

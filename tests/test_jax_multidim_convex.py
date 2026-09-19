@@ -14,6 +14,8 @@ from quantumflow.jax import (
 from quantumflow.multidim import (
     Grid,
     generate_multidim_dataset,
+    generate_piecewise_constant_potentials,
+    generate_piecewise_linear_potentials,
     solve_multidim_schroedinger,
 )
 
@@ -156,3 +158,98 @@ def test_variational_ground_state_solver_2d() -> None:
     assert jnp.all(n_opt >= 0.0)
     assert np.isclose(float(jnp.sum(n_opt) * grid.volume_element), 2.0, atol=1e-4)
     assert np.isfinite(sol["chemical_potential"])
+
+
+def test_3d_piecewise_constant_generation_and_solver() -> None:
+    grid = Grid.create(dimension=3, lower=-2.5, upper=2.5, points=10)
+    assert grid.total_points == 1000
+
+    # Test box shape
+    v_box = generate_piecewise_constant_potentials(grid, dataset_size=2, shape="box", seed=42)
+    assert v_box.shape == (2, 1000)
+    assert np.all(v_box <= 0.0)
+
+    # Test staircase shape
+    v_staircase = generate_piecewise_constant_potentials(
+        grid, dataset_size=2, shape="staircase", seed=43
+    )
+    assert v_staircase.shape == (2, 1000)
+    assert np.all(v_staircase <= 0.0)
+
+    # Test sphere shape
+    v_sphere = generate_piecewise_constant_potentials(grid, dataset_size=2, shape="sphere", seed=44)
+    assert v_sphere.shape == (2, 1000)
+
+    # Solve 3D Schrödinger on a piecewise constant box potential
+    sol = solve_multidim_schroedinger(potential=v_box[0], grid=grid, num_orbitals=2)
+    assert len(sol["orbital_energies"]) == 2
+    assert sol["orbital_energies"][0] <= sol["orbital_energies"][1]
+
+    # Check density norm int n(r) dr == 2
+    norm = np.sum(sol["density"]) * grid.volume_element
+    assert np.isclose(norm, 2.0, atol=1e-4)
+
+    # Check energy balance E = Ts + V
+    assert np.isclose(
+        sol["total_energy"], sol["kinetic_energy"] + sol["potential_energy"], atol=1e-5
+    )
+
+
+def test_3d_piecewise_linear_generation_and_solver() -> None:
+    grid = Grid.create(dimension=3, lower=-2.5, upper=2.5, points=10)
+
+    # Test convex polyhedral mode
+    v_poly = generate_piecewise_linear_potentials(
+        grid, dataset_size=2, mode="convex_polyhedral", num_facets=8, seed=50
+    )
+    assert v_poly.shape == (2, 1000)
+
+    # Test L1 pyramid mode
+    v_pyr = generate_piecewise_linear_potentials(grid, dataset_size=2, mode="l1_pyramid", seed=51)
+    assert v_pyr.shape == (2, 1000)
+
+    # Solve 3D Schrödinger on convex polyhedral potential
+    sol = solve_multidim_schroedinger(potential=v_poly[0], grid=grid, num_orbitals=2)
+    assert len(sol["orbital_energies"]) == 2
+    norm = np.sum(sol["density"]) * grid.volume_element
+    assert np.isclose(norm, 2.0, atol=1e-4)
+    assert np.isclose(
+        sol["total_energy"], sol["kinetic_energy"] + sol["potential_energy"], atol=1e-5
+    )
+
+
+def test_3d_piecewise_dataset_euler_relation() -> None:
+    grid = Grid.create(dimension=3, lower=-2.0, upper=2.0, points=8)
+    assert grid.total_points == 512
+
+    # Dataset with piecewise constant potentials
+    data_const = generate_multidim_dataset(
+        grid=grid,
+        dataset_size=3,
+        num_orbitals=2,
+        potential_type="piecewise_constant",
+        shape="box",
+        seed=100,
+    )
+    assert data_const["densities"].shape == (3, 512)
+    for i in range(3):
+        mu = data_const["chemical_potentials"][i]
+        v = data_const["potentials"][i]
+        deriv = data_const["derivatives"][i]
+        assert np.allclose(deriv, mu - v)
+
+    # Dataset with piecewise linear potentials
+    data_linear = generate_multidim_dataset(
+        grid=grid,
+        dataset_size=3,
+        num_orbitals=2,
+        potential_type="piecewise_linear",
+        mode="convex_polyhedral",
+        seed=200,
+    )
+    assert data_linear["densities"].shape == (3, 512)
+    for i in range(3):
+        mu = data_linear["chemical_potentials"][i]
+        v = data_linear["potentials"][i]
+        deriv = data_linear["derivatives"][i]
+        assert np.allclose(deriv, mu - v)

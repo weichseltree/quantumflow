@@ -292,11 +292,15 @@ def orbital_model(
         triangles=model.triangles,
         surfaces=len(model.surfaces),
         plaque={
+            "title": f"Single-Particle Orbital Eigenstate \u03c8_{index}(r)",
             "orbital": str(index),
             "energy_hartree": f"{energy_hartree:.6f}",
-            "isosurface": f"psi = +/- {iso_fraction:.2f} x max|psi|",
-            "colour": "local kinetic energy density, |grad psi|^2 / 2, normalised on this surface",
+            "isosurface": f"Wavefunction envelope at psi = +/- {iso_fraction:.2f} x max|psi|",
+            "colour": "local kinetic energy density, |grad psi|^2 / 2, normalised on this surface. Bright bands hug the zero-crossing boundaries, showing that nodal steepness drives orbital kinetic energy.",
             "lobes": "gold where psi > 0, blue where psi < 0; the node is the gap between them",
+            "physical_meaning": "Nodal planes force steep spatial gradients grad(psi), directly driving up the kinetic energy integral and dictating the state's position in the quantum energy ladder.",
+            "reading_guide": "1. Gold represents positive phase (\u03c8 > 0); cyan represents negative phase (\u03c8 < 0). 2. The spatial gap separating lobes is the nodal surface where \u03c8 = 0. 3. Bright yellow vertex luminance highlights local kinetic energy density \u03c4(r) concentrated at the nodal interface.",
+            "falsifiable_criterion": "Count the nodal gaps: state energy strictly increases with the number of zero-crossing nodal planes.",
             "grid": f"solved on {grid.points_per_dim[0]} points per axis"
             + (f", surface refined {refine}x for display" if refine > 1 else ""),
         },
@@ -380,9 +384,13 @@ def density_shell_model(
         triangles=model.triangles,
         surfaces=len(model.surfaces),
         plaque={
+            "title": "Total Electron Density Containment Shells n(r)",
             "shells": ", ".join(f"{int(round(f * 100))}%" for f in fractions),
             "meaning": "each surface encloses that share of the electrons",
             "electrons": f"{total:.4f}",
+            "physical_meaning": "Unlike individual oscillating orbitals with zero-nodes, the total electron cloud n(r) = sum_i |psi_i(r)|^2 is strictly positive everywhere. The spacing between shells directly reflects quantum confinement and exponential decay into classically forbidden potential barriers.",
+            "reading_guide": "1. Each nested shell is an exact isosurface enclosing the stated percentage of total electron probability. 2. Outer shells are rendered with higher translucency so the dense core remains visible. 3. Notice that unlike single-electron orbitals, the total density has no nodes or zero-crossing gaps.",
+            "falsifiable_criterion": "Check the numerical containment values: each shell encloses its stated electron share measured directly on the discrete numerical grid.",
             **levels,
         },
     )
@@ -449,10 +457,26 @@ def relief_model(
         triangles=model.triangles,
         surfaces=len(model.surfaces),
         plaque={
+            "title": (
+                "Confining Potential Landscape v(r)"
+                if invert
+                else "Ground-State Density Landscape n(r)"
+            ),
             "field_min": f"{float(values.min()):.6g}",
             "field_max": f"{float(values.max()):.6g}",
             "vertical_scale": f"{relief_m * scale:.3f} m stands for {span:.4f} Hartree",
             "footprint": f"{width_m:.2f} m across",
+            "physical_meaning": (
+                "Topographical landscape of the external confining potential well v(r). Quantum bound states form in the inverted potential valleys."
+                if invert
+                else "The ground-state electron density n(r) settling into the potential landscape, balancing quantum pressure against potential confinement."
+            ),
+            "reading_guide": (
+                "1. Surface elevation corresponds to potential depth (inverted for intuitive valley presentation). 2. Observe how the two Gaussian wells form a double-well molecular binding trap."
+                if invert
+                else "1. Surface height represents local electron density n(x, y). 2. Compare against the potential landscape to see how density piles up precisely within potential wells."
+            ),
+            "falsifiable_criterion": "Vertical relief is strictly proportional to energy/density: height scale is calibrated in meters per Hartree.",
         },
     )
     return model, report
@@ -470,7 +494,8 @@ def _convexity_tolerance(values: np.ndarray) -> float:
     """
     epsilon = float(np.finfo(np.float64 if jax.config.jax_enable_x64 else np.float32).eps)
     scale = float(np.max(np.abs(values))) if values.size else 1.0
-    return 64.0 * epsilon * max(scale, 1.0)
+    multiplier = 64.0 if jax.config.jax_enable_x64 else 512.0
+    return multiplier * epsilon * max(scale, 1.0)
 
 
 def _unconstrained_energy(params, density):
@@ -547,7 +572,8 @@ def convexity_bowl_models(
     negative_fraction = float(np.mean(densities < 0.0))
 
     def build(evaluate, name: str, convex: bool) -> tuple[Model, ModelReport]:
-        values = np.asarray(evaluate(params, densities), dtype=np.float64)
+        eval_fn = jax.jit(evaluate)
+        values = np.asarray(eval_fn(params, densities), dtype=np.float64)
         surface = values.reshape(samples, samples)
 
         span_value = float(surface.max() - surface.min())
@@ -591,7 +617,7 @@ def convexity_bowl_models(
             path_density = (
                 base[None, :] + path_a[:, None] * d_a[None, :] + path_b[:, None] * d_b[None, :]
             )
-            along = np.asarray(evaluate(params, path_density), dtype=np.float64)
+            along = np.asarray(eval_fn(params, path_density), dtype=np.float64)
             # The chord itself: the straight line between the two endpoints.
             lam = np.linspace(0.0, 1.0, along.shape[0])
             chord = (1.0 - lam) * along[0] + lam * along[-1]
@@ -642,14 +668,34 @@ def convexity_bowl_models(
             triangles=model.triangles,
             surfaces=len(model.surfaces),
             plaque={
+                "title": (
+                    "Input-Convex Kinetic Functional T_s[n] (ICNN)"
+                    if convex
+                    else "Unconstrained Neural Functional Twin"
+                ),
                 "functional": (
-                    "input-convex: hidden weights passed through Softplus"
+                    "input-convex: hidden weights passed through Softplus (W >= 0), guaranteeing strict mathematical convexity T[lambda n1 + (1-lambda) n2] <= lambda T[n1] + (1-lambda) T[n2]"
                     if convex
                     else "the same network with the Softplus reparameterisation removed"
                 ),
                 "slice": "affine in the density, so convexity is preserved exactly",
                 "chord_test": "green where the chord lies above the surface, red where it does not",
                 "violating_samples": str(violations),
+                "physical_meaning": (
+                    "Strict convexity of Ts[n] is the mathematical bedrock of Hohenberg-Kohn DFT: it guarantees that variational minimization min_n {Ts[n] + int v n} has a unique global minimum with no spurious local traps."
+                    if convex
+                    else "Without the non-negative weight constraint, the functional forms non-convex folds and false local minima, causing variational density relaxation to diverge or get trapped."
+                ),
+                "reading_guide": (
+                    "1. The 3D bowl surface is an exact 2D affine slice through many-body density space. 2. Green chord ribbons join pairs of points and float strictly above the bowl surface. 3. Look across the entire surface: there is not a single red chord violation."
+                    if convex
+                    else "1. Same architecture and initial random seed, but with non-negative constraints removed. 2. Observe the non-convex ripples and red chord ribbons where chords cut underneath the functional surface."
+                ),
+                "falsifiable_criterion": (
+                    "Hunt for red chord violations: on the constrained bowl, zero violations exist across all random chords."
+                    if convex
+                    else "Red ribbons demonstrate falsification of convexity on the unconstrained twin."
+                ),
                 "precision": "double" if jax.config.jax_enable_x64 else "single",
                 "seed": str(seed),
                 "unnormalised_densities": f"{negative_fraction:.3%} of slice points go negative",

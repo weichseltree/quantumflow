@@ -116,6 +116,31 @@ def test_render_transport_flow_animation(tmp_path: Path) -> None:
 def test_export_grove_exhibition_manifest(tmp_path: Path) -> None:
     manifest = export_grove_exhibition_manifest(output_dir=tmp_path, grid_points=8, num_orbitals=2)
     assert manifest["title"]
-    assert len(manifest["rooms"]) == 4
+    assert "subtitle" in manifest
+    assert "curator_statement" in manifest
+    assert len(manifest["rooms"]) == 5
+
+    for room in manifest["rooms"]:
+        assert "id" in room
+        assert "gallery_number" in room
+        assert "title" in room
+        assert "curator_hook" in room
+        assert "concept_explanation" in room
+        assert "mathematical_thesis" in room
+        assert "falsifiable_criterion" in room
+        assert "visitor_reading_guide" in room
+        assert "boundary_limitations" in room
+        assert len(room["artifacts"]) > 0
+        for art in room["artifacts"]:
+            assert "path" in art
+            assert "kind" in art
+            assert "title" in art
+            assert "description" in art
+            assert "physical_insight" in art
+            assert "how_to_read" in art
+            assert "boundary_caveat" in art
+
     assert (tmp_path / "grove_exhibition_manifest.json").is_file()
     assert (tmp_path / "density_3d.npy").is_file()
+    assert (tmp_path / "orbitals_3d.npy").is_file()
+

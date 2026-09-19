@@ -56,4 +56,14 @@ for seed in 42 43 44; do
 done
 
 echo ""
-echo "All 12 3D transport sweep runs queued under sweep '${SWEEP_NAME}'."
+echo "Queueing final aggregation & summary reporting..."
+exp run "transport-3d-finalize" \
+  --prio 3 \
+  --sweep "${SWEEP_NAME}" \
+  --lane cpu \
+  --log "${BASE_DIR}/finalize.log" \
+  -- "${PYTHON}" scripts/finalize_transport_3d_sweep.py \
+     --output-dir "${BASE_DIR}"
+
+echo "All 12 3D transport sweep runs plus finalizer queued under sweep '${SWEEP_NAME}'."
+

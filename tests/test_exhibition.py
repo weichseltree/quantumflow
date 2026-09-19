@@ -255,7 +255,8 @@ class TestShooting:
 
 class TestExhibitionModels:
     @pytest.fixture(scope="class")
-    def solved(self) -> dict:
+    @classmethod
+    def solved(cls) -> dict:
         grid = Grid.create(dimension=3, lower=-3.0, upper=3.0, points=12)
         coords = grid.coordinates
         offset = np.array([0.8, 0.0, 0.0])
@@ -336,7 +337,8 @@ class TestConvexityExhibit:
     """The bowls are an invitation to falsify a claim; the claim must hold."""
 
     @pytest.fixture(scope="class")
-    def slice_directions(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    @classmethod
+    def slice_directions(cls) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         rng = np.random.default_rng(7)
         base = rng.uniform(0.2, 1.0, 64)
         return base, rng.normal(0, 0.05, 64), rng.normal(0, 0.05, 64)

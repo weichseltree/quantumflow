@@ -113,6 +113,15 @@ def build_walk(output_dir: Path, points: int, refine: int) -> list[dict]:
                     "energy_hartree": energy,
                     "height_m": round(height, 3),
                     "metres_per_hartree": round(metres_per_hartree, 4),
+                    "physical_description": (
+                        f"Station at bond separation d = {separation:.1f} bohr. "
+                        + ("Constructive symmetric bonding state: electron probability accumulates between wells, lowering electrostatic potential energy."
+                           if index == 0 else
+                           "Destructive antisymmetric antibonding state: a nodal zero-crossing plane forms between wells, driving up spatial gradient kinetic energy.")
+                    ),
+                    "reading_guide": (
+                        "Walk the gallery to observe molecular bond dissociation: as separation d increases, the energy gap \u0394E = E_anti - E_bond closes asymptotically toward isolated atomic states."
+                    ),
                 },
             )
     return entries
@@ -156,7 +165,15 @@ def build_standing(output_dir: Path, points: int, refine: int) -> list[dict]:
                 "energy_hartree": float(energies[index]),
                 "height_m": round(height, 3),
                 "metres_per_hartree": round(metres_per_hartree, 4),
-                "nodes_visible": "count the gaps between lobes",
+                "nodes_visible": f"Count the {index} nodal gaps between lobes",
+                "physical_description": (
+                    "Ground state: no nodal planes, single coherent probability lobe, lowest possible kinetic energy."
+                    if index == 0 else
+                    f"Excited state #{index + 1}: {index} zero-crossing nodal plane(s) force steep spatial wavefunction curvature, driving up the kinetic energy integral."
+                ),
+                "reading_guide": (
+                    "The model is suspended at an elevation directly proportional to its eigenvalue energy. Luminous yellow rim highlights local kinetic energy density \u03c4(r) = 1/2|\u2207\u03c8|^2."
+                ),
             },
         )
 

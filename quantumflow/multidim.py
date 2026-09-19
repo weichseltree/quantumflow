@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass
 from typing import Any
 
@@ -80,6 +81,7 @@ class Grid:
         return stacked
 
 
+@functools.lru_cache(maxsize=32)
 def laplacian_matrix_1d(n: int, h: float) -> np.ndarray:
     """Standard 1D central difference 3-point Laplacian matrix with Dirichlet boundary."""
     main_diag = -2.0 * np.ones(n, dtype=np.float64)
@@ -87,6 +89,7 @@ def laplacian_matrix_1d(n: int, h: float) -> np.ndarray:
     return (np.diag(main_diag) + np.diag(off_diag, 1) + np.diag(off_diag, -1)) / (h**2)
 
 
+@functools.lru_cache(maxsize=32)
 def laplacian_matrix(grid: Grid) -> np.ndarray:
     """Build the d-dimensional grid Laplacian operator using Kronecker products."""
     l_1ds = [laplacian_matrix_1d(n, h) for n, h in zip(grid.points_per_dim, grid.spacings)]
@@ -108,6 +111,7 @@ def laplacian_matrix(grid: Grid) -> np.ndarray:
     raise ValueError(f"Unsupported dimension {grid.dimension}")
 
 
+@functools.lru_cache(maxsize=32)
 def laplacian_matrix_sparse(grid: Grid) -> sp.csr_matrix:
     """Build the d-dimensional grid Laplacian as a sparse operator.
 
@@ -135,11 +139,13 @@ def laplacian_matrix_sparse(grid: Grid) -> sp.csr_matrix:
     return total.tocsr()
 
 
+@functools.lru_cache(maxsize=32)
 def kinetic_operator(grid: Grid) -> np.ndarray:
     """Return kinetic energy operator T = -1/2 nabla^2."""
     return -0.5 * laplacian_matrix(grid)
 
 
+@functools.lru_cache(maxsize=32)
 def kinetic_operator_sparse(grid: Grid) -> sp.csr_matrix:
     """Return the sparse kinetic energy operator T = -1/2 nabla^2."""
     return -0.5 * laplacian_matrix_sparse(grid)
